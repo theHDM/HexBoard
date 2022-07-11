@@ -88,11 +88,6 @@ byte            activeButtons[elementCount];                            // Array
 byte            previousActiveButtons[elementCount];                    // Array to hold previous note button states for comparison
 unsigned long   activeButtonsTime[elementCount];                        // Array to track last note button activation time for debounce
 
-// Control button states
-
-byte octaveUpState; // Top row (white) right
-byte octaveDownState; // Bottom row (white) right
-
 
 // MIDI channel assignment
 byte midiChannel = 0;                                                   // Current MIDI channel (changed via user input)
@@ -134,16 +129,7 @@ void loop()
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
 
-  // Set all states and values related to the control buttons and pots
-  //    runControlModule(); //turned off for now
-
-  // Run the octave select function
-  //    runOctave(); //wating until we get the basics sorted out
-
-  // Run the channel select function
-  //runChannelSelect();
-
-  // Send notes to the MIDI bus
+  // Act on those buttons
   playNotes();
 }
 // END LOOP SECTION
@@ -201,95 +187,6 @@ void readDigitalButtons()
   }
 }
 
-void runControlModule()
-{
-  // Digital Buttons
-  for (int buttonNumber = 9; buttonNumber < 30; buttonNumber++) // Limit to the 10 buttons in the control panel
-  {
-    if (activeButtons[buttonNumber] != previousActiveButtons[buttonNumber]) // Compare current button state to the previous state, and if a difference is found...
-    {
-      if (activeButtons[buttonNumber] == 1) // If the buttons is active
-      {
-        if (buttonNumber == 9) {
-          octaveUpState      = HIGH;
-        }
-        if (buttonNumber == 29) {
-          octaveDownState    = HIGH;
-        }
-        previousActiveButtons[buttonNumber] = 1; // Update the "previous" variable for comparison next loop
-      }
-      if (activeButtons[buttonNumber] == 0) // If the button is inactive
-      {
-
-        if (buttonNumber == 19) {
-          octaveUpState      = LOW;
-        }
-        if (buttonNumber == 39) {
-          octaveDownState    = LOW;
-        }
-        previousActiveButtons[buttonNumber] = 0; // Update the "previous" variable for conparison next loop
-      }
-    }
-  }
-}
-
-// TODO: We still want to be able to change octaves with the two buttons 19 and 39.
-void runOctave()
-{
-  /*if (metaKeyState == LOW)                                                                        // If the meta key is not held
-    {
-      if (octaveUpState == HIGH && previousOctaveUpState == LOW && octave < 24)                   // Highest current Wicki-Hayden layout pitch is 94 - Keep pitch in bounds of 7 bit value range (0-127)
-      {
-          previousOctaveUpState = HIGH;                                                           // Lock input until released
-          for (int i = 10; i < elementCount; i++)                                                 // For all note buttons in the deck
-          {
-              activeButtons[i] = 0;                                                               // Pop any active notes to prevent hangs when abruptly changing octave modifier
-          }
-          playNotes();
-          octave = octave + 12;                                                                   // Increment octave modifier
-          // LCD Update Octave Info
-          if (octave ==  0) { lcd.setCursor(14,1); lcd.print(" 0"); }
-          if (octave == 12) { lcd.setCursor(14,1); lcd.write(0); lcd.print("1"); }
-          if (octave == 24) { lcd.setCursor(14,1); lcd.write(0); lcd.print("2"); }
-          if (octave == -12) { lcd.setCursor(14,1); lcd.write(1);lcd.print("1"); }
-          if (octave == -24) { lcd.setCursor(14,1); lcd.write(1);lcd.print("2"); }
-      }
-      if (octaveDownState == HIGH && previousOctaveDownState == LOW && octave > -23)              // Lowest current Wicki-Hayden layout pitch is 30 - Keep pitch in bounds of 7 bit value range (0-127)
-      {
-          previousOctaveDownState = HIGH;                                                         // Lock input until released
-          for (int i = 10; i < elementCount; i++)                                                 // For all note buttons in the deck
-          {
-              activeButtons[i] = 0;                                                               // Pop any active notes to prevent hangs when abruptly changing octave modifier
-          }
-          playNotes();
-          octave = octave - 12;                                                                   // Decrement octave modifier
-          // LCD Update Octave Info
-          if (octave ==  0) { lcd.setCursor(14,1); lcd.print(" 0"); }
-          if (octave == 12) { lcd.setCursor(14,1); lcd.write(0); lcd.print("1"); }
-          if (octave == 24) { lcd.setCursor(14,1); lcd.write(0); lcd.print("2"); }
-          if (octave == -12) { lcd.setCursor(14,1); lcd.write(1);lcd.print("1"); }
-          if (octave == -24) { lcd.setCursor(14,1); lcd.write(1);lcd.print("2"); }
-      }
-      if (octaveUpState == HIGH && octaveDownState == HIGH && octave != 0)                        // If both keys are pressed simultaneously and octave is not default
-      {
-          for (int i = 10; i < elementCount; i++)                                                 // For all note buttons in the deck
-          {
-              activeButtons[i] = 0;                                                               // Pop any active notes to prevent hangs when abruptly changing octave modifier
-          }
-          playNotes();
-          octave = 0;                                                                             // Reset octave modifier to 0
-          // LCD Update Octave Info
-          if (octave ==  0) { lcd.setCursor(14,1); lcd.print(" 0"); }
-          if (octave == 12) { lcd.setCursor(14,1); lcd.write(0); lcd.print("1"); }
-          if (octave == 24) { lcd.setCursor(14,1); lcd.write(0); lcd.print("2"); }
-          if (octave == -12) { lcd.setCursor(14,1); lcd.write(1);lcd.print("1"); }
-          if (octave == -24) { lcd.setCursor(14,1); lcd.write(1);lcd.print("2"); }
-      }
-    }*/
-}
-
-
-
 void playNotes()
 {
   for (int i = 0; i < elementCount; i++) // For all buttons in the deck
@@ -301,21 +198,17 @@ void playNotes()
         if (wickiHaydenLayout[i] < 128) {
           noteOn(midiChannel, (wickiHaydenLayout[i] + octave) % 128 , velocity);
         } else {
-      commandPress(wickiHaydenLayout[i]);
+          commandPress(wickiHaydenLayout[i]);
         }
-        
-        previousActiveButtons[i] = 1; // Update the "previous" variable for comparison on next loop
-      }
-      if (activeButtons[i] == 0) // If the button is inactive (released)
-      {
+      } else {
+      // If the button is inactive (released)
         if (wickiHaydenLayout[i] < 128) {
           noteOff(midiChannel, (wickiHaydenLayout[i] + octave) % 128, 0);
         } else {
           commandRelease(wickiHaydenLayout[i]);
         }
-        
-        previousActiveButtons[i] = 0; // Update the "previous" variable for comparison on next loop
       }
+      previousActiveButtons[i] = activeButtons[i]; // Update the "previous" variable for comparison on next loop
     }
   }
 }
@@ -338,30 +231,23 @@ void loopNoteOn(byte channel, byte pitch, byte velocity)
 
 void commandPress(byte command)
 {
-  if(command == OCT_DN){
-    octave -= 12;
-    octaveDownState = HIGH;
-  } else if (command == OCT_UP){
-    octave += 12;
-        octaveUpState = HIGH;
-  }
-  if (octaveDownState && octaveUpState) {
-    timeBothPressed = currentTime;
-  } else {
-    timeBothPressed = 0;
+  // Keep octave between -12 and 24
+  if(command == OCT_DN) {
+    if (octave >= 0) {
+      octave -= 12;
+    }
+  } else if (command == OCT_UP) {
+    if (octave <= 12) {
+      octave += 12;
+    }
   }
 }
 void commandRelease(byte command)
 {
-  if(command == OCT_DN){
-      octaveDownState = LOW;
-  } else if (command == OCT_UP){
-    octaveUpState = LOW;
-  }
-  if (timeBothPressed && currentTime > timeBothPressed + 500){
-    octave = 0;
-    // also change modes
-    timeBothPressed = 0;
+  if (command == OCT_DN) {
+    // Do something?
+  } else if (command == OCT_UP) {
+    // Do something else?
   }
 }
 
