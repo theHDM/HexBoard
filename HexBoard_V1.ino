@@ -1,5 +1,20 @@
 // Hardware Information:
 // Teensy LC set to 48MHz with USB type MIDI
+#include <FastLED.h>
+
+#define LEDS_PIN 17
+#define NUM_LEDS 130
+
+CRGB leds[NUM_LEDS];
+
+void init_leds()
+{
+  FastLED.addLeds<WS2811, LEDS_PIN, RGB>(leds, NUM_LEDS);
+  FastLED.setBrightness(50);
+  for (int i=0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+}
 
 //
 // Button matrix and LED locations
@@ -75,6 +90,9 @@ ROW_FLIP(     44,  45,  46,  47,  48,  49,  50,  51,  52,  53),
 ROW_FLIP(UNUSED, 48,  49,  50,  51,  52,  53,  54,  55,  56),
 ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60)
 };
+// LEDs for OCT_UP/OCT_DN status.
+const byte octUpSW = 10 - 1;
+const byte octDnSW = 30 - 1;
 
 //byte *currentLayout = &wickiHaydenLayout;
 
@@ -115,6 +133,9 @@ void setup()
     pinMode(rows[pinNumber], INPUT);                                            // Set the pinMode to INPUT (0V / LOW).
   }
   Serial.begin(115200);
+  init_leds();
+  setOctLED();
+
   // Print diagnostic troubleshooting information to serial monitor
   diagnosticTest();
 }
@@ -128,6 +149,9 @@ void loop()
 
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
+
+  // Do the LEDS
+  FastLED.show();
 
   // Act on those buttons
   playNotes();
@@ -239,22 +263,41 @@ void commandPress(byte command)
   if(command == OCT_DN) {
     if (octave >= 0) {
       octave -= 12;
+      setOctLED(); leds[octDnSW] = CRGB::White;
     }
   } else if (command == OCT_UP) {
     if (octave <= 12) {
       octave += 12;
+      setOctLED(); leds[octUpSW] = CRGB::White;
     }
   }
 }
 void commandRelease(byte command)
 {
   if (command == OCT_DN) {
-    // Do something?
+    setOctLED();
   } else if (command == OCT_UP) {
-    // Do something else?
+    setOctLED();
   }
 }
 
+
+void setOctLED()
+{
+  if (octave <= -12) {
+    leds[octUpSW].setRGB(0xA0, 0, 0x20);
+    leds[octDnSW] = CRGB::Black; // No lower to go.
+  } else if (octave <= 0) {
+    leds[octUpSW] = CRGB::Purple;
+    leds[octDnSW] = CRGB::Red;
+  } else if (octave <= 12) {
+    leds[octUpSW] = CRGB::Blue;
+    leds[octDnSW].setRGB(0xA0, 0, 0x20);
+  } else if (octave <= 24) {
+    leds[octUpSW] = CRGB::Black; // No higher to go.
+    leds[octDnSW] = CRGB::Purple;
+  }
+}
 
 // Send MIDI Note Off
 // 1st byte = Event type (0x09 = note on, 0x08 = note off).
