@@ -20,7 +20,7 @@
 //        140 139 138 137 136 135 134 133 132 131
 
 //DIAGNOSTICS
-bool diagnostics = 0;
+int diagnostics = 1;
 
 // Define digital button matrix pins
 const byte columns[] = { 25, 24,  9,  8,  7,  6,  5,  4,  3,  2};                // Column pins in order from right to left
@@ -32,46 +32,48 @@ const byte elementCount     = columnCount * rowCount;// The number of elements i
 
 // Since MIDI only uses 7 bits, we can give greater values special meanings.
 // (see commandPress)
-const int OCTAVEDOWN = 128;
-const int OCTAVEUP = 129;
+const int OCT_DN = 128;
+const int OCT_UP = 129;
 const int UNUSED = 255;
+
+#define ROW_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, ii, iii, iv, v, vi, vii, viii, ix, x
 
 // MIDI note value tables
 const byte wickiHaydenLayout[elementCount] = {
-   78,  80,  82,  84,  86,  88,  90,  92,  94,  OCTAVEUP,
-71,  73,  75,  77,  79,  81,  83,  85,  87,  89,
-   66,  68,  70,  72,  74,  76,  78,  80,  82,  OCTAVEDOWN,
-59,  61,  63,  65,  67,  69,  71,  73,  75,  77,
-   54,  56,  58,  60,  62,  64,  66,  68,  70,  UNUSED,
-47,  49,  51,  53,  55,  57,  59,  61,  63,  65,
-   42,  44,  46,  48,  50,  52,  54,  56,  58,  UNUSED,
-35,  37,  39,  41,  43,  45,  47,  49,  51,  53,
-   30,  32,  34,  36,  38,  40,  42,  44,  46,  UNUSED,
-23,  25,  27,  29,  31,  33,  35,  37,  39,  41
+ROW_FLIP(OCT_UP, 78,  80,  82,  84,  86,  88,  90,  92,  94),
+ROW_FLIP(     71,  73,  75,  77,  79,  81,  83,  85,  87,  89),
+ROW_FLIP(OCT_DN, 66,  68,  70,  72,  74,  76,  78,  80,  82),
+ROW_FLIP(     59,  61,  63,  65,  67,  69,  71,  73,  75,  77),
+ROW_FLIP(UNUSED, 54,  56,  58,  60,  62,  64,  66,  68,  70),
+ROW_FLIP(     47,  49,  51,  53,  55,  57,  59,  61,  63,  65),
+ROW_FLIP(UNUSED, 42,  44,  46,  48,  50,  52,  54,  56,  58),
+ROW_FLIP(     35,  37,  39,  41,  43,  45,  47,  49,  51,  53),
+ROW_FLIP(UNUSED, 30,  32,  34,  36,  38,  40,  42,  44,  46),
+ROW_FLIP(     23,  25,  27,  29,  31,  33,  35,  37,  39,  41)
 };
 const byte harmonicTableLayout[elementCount] = {
-   20,  27,  34,  41,  48,  55,  62,  69,  76,  OCTAVEUP,
-17,  24,  31,  38,  45,  52,  59,  66,  73,  80,
-   21,  28,  35,  42,  49,  56,  63,  70,  77,  OCTAVEDOWN,
-18,  25,  32,  39,  46,  53,  60,  67,  74,  81,
-   22,  29,  36,  43,  50,  57,  64,  71,  78,  UNUSED,
-19,  26,  33,  40,  47,  54,  61,  68,  75,  82,
-   23,  30,  37,  44,  51,  58,  65,  72,  79,  UNUSED,
-20,  27,  34,  41,  48,  55,  62,  69,  76,  83,
-   24,  31,  38,  45,  52,  59,  66,  73,  80,  UNUSED,
-21,  28,  35,  42,  49,  56,  63,  70,  77,  84
+ROW_FLIP(OCT_UP, 20,  27,  34,  41,  48,  55,  62,  69,  76),
+ROW_FLIP(     17,  24,  31,  38,  45,  52,  59,  66,  73,  80),
+ROW_FLIP(OCT_DN, 21,  28,  35,  42,  49,  56,  63,  70,  77),
+ROW_FLIP(     18,  25,  32,  39,  46,  53,  60,  67,  74,  81),
+ROW_FLIP(UNUSED, 22,  29,  36,  43,  50,  57,  64,  71,  78),
+ROW_FLIP(     19,  26,  33,  40,  47,  54,  61,  68,  75,  82),
+ROW_FLIP(UNUSED, 23,  30,  37,  44,  51,  58,  65,  72,  79),
+ROW_FLIP(     20,  27,  34,  41,  48,  55,  62,  69,  76,  83),
+ROW_FLIP(UNUSED, 24,  31,  38,  45,  52,  59,  66,  73,  80),
+ROW_FLIP(     21,  28,  35,  42,  49,  56,  63,  70,  77,  84)
 };
 const byte gerhardLayout[elementCount] = {
-   20,  21,  22,  23,  24,  25,  26,  27,  28,  OCTAVEUP,
-23,  24,  25,  26,  27,  28,  29,  30,  31,  32,
-   27,  28,  29,  30,  31,  32,  33,  34,  35,  OCTAVEDOWN,
-30,  31,  32,  33,  34,  35,  36,  37,  38,  39,
-   34,  35,  36,  37,  38,  39,  40,  41,  42,  UNUSED,
-37,  38,  39,  40,  41,  42,  43,  44,  45,  46,
-   41,  42,  43,  44,  45,  46,  47,  48,  49,  UNUSED,
-44,  45,  46,  47,  48,  49,  50,  51,  52,  53,
-   48,  49,  50,  51,  52,  53,  54,  55,  56,  UNUSED,
-51,  52,  53,  54,  55,  56,  57,  58,  59,  60
+ROW_FLIP(OCT_UP, 20,  21,  22,  23,  24,  25,  26,  27,  28),
+ROW_FLIP(     23,  24,  25,  26,  27,  28,  29,  30,  31,  32),
+ROW_FLIP(OCT_DN, 27,  28,  29,  30,  31,  32,  33,  34,  35),
+ROW_FLIP(     30,  31,  32,  33,  34,  35,  36,  37,  38,  39),
+ROW_FLIP(UNUSED, 34,  35,  36,  37,  38,  39,  40,  41,  42),
+ROW_FLIP(     37,  38,  39,  40,  41,  42,  43,  44,  45,  46),
+ROW_FLIP(UNUSED, 41,  42,  43,  44,  45,  46,  47,  48,  49),
+ROW_FLIP(     44,  45,  46,  47,  48,  49,  50,  51,  52,  53),
+ROW_FLIP(UNUSED, 48,  49,  50,  51,  52,  53,  54,  55,  56),
+ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60)
 };
 
 //byte *currentLayout = &wickiHaydenLayout;
@@ -117,15 +119,15 @@ void setup()
   {
     pinMode(rows[pinNumber], INPUT);                                            // Set the pinMode to INPUT (0V / LOW).
   }
+  Serial.begin(115200);
+  // Print diagnostic troubleshooting information to serial monitor
+  diagnosticTest();
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 // START LOOP SECTION
 void loop()
 {
-  // Print diagnostic troubleshooting information to serial monitor
-  // diagnosticTest();
-
   // Store the current time in a uniform variable for this program loop
   currentTime = millis();
 
@@ -151,46 +153,51 @@ void loop()
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 // START FUNCTIONS SECTION
 
+void diagnosticTest()
+{
+  if (diagnostics > 0) {
+    Serial.println("Zach was here");
+  }
+}
+
 void readDigitalButtons()
 {
+  if (diagnostics == 1){
+    Serial.println();
+  }
   // Button Deck
-  for (byte columnIndex = 0; columnIndex < columnCount; columnIndex++) // Iterate through each of the column pins.
+  for (byte rowIndex = 0; rowIndex < rowCount; rowIndex++) // Iterate through each of the row pins.
   {
-    if (diagnostics == 1){
-      Serial.println();
-    }
-    byte currentColumn = columns[columnIndex]; // Hold the currently selected column pin in a variable.
-    pinMode(currentColumn, OUTPUT); // Set that column pin to OUTPUT mode and...
-    digitalWrite(currentColumn, LOW); // set the pin state to LOW turning it into a temporary ground.
-    for (byte rowIndex = 0; rowIndex < rowCount; rowIndex++) // Now iterate through each of the row pins that are connected to the current column pin.
+    byte rowPin = rows[rowIndex]; // Hold the currently selected row pin in a variable.
+    pinMode(rowPin, OUTPUT); // Set that row pin to OUTPUT mode and...
+    digitalWrite(rowPin, LOW); // set the pin state to LOW turning it into a temporary ground.
+    for  (byte columnIndex = 0; columnIndex < columnCount; columnIndex++)// Now iterate through each of the column pins that are connected to the current row pin.
     {
-      byte currentRow = rows[rowIndex]; // Hold the currently selected row pin in a variable.
-      pinMode(currentRow, INPUT_PULLUP); // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
+      byte columnPin = columns[columnIndex]; // Hold the currently selected column pin in a variable.
+      pinMode(columnPin, INPUT_PULLUP); // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
       byte buttonNumber = columnIndex + (rowIndex * columnCount); // Assign this location in the matrix a unique number.
-      if (diagnostics == 1){
-        Serial.print(buttonNumber);
-        Serial.print(" - ");
-      }
       delayMicroseconds(50); // Delay to give the pin modes time to change state (false readings are caused otherwise).
-      byte buttonState = !digitalRead(currentRow); // Invert reading due to INPUT_PULLUP, and store the currently selected pin state.
-      if (buttonState == HIGH && (millis() - activeButtonsTime[buttonNumber]) > debounceTime)     // If button is active and passes debounce
+      byte buttonState = digitalRead(columnPin); // (don't)Invert reading due to INPUT_PULLUP, and store the currently selected pin state.
+      if (buttonState == LOW )//&& (millis() - activeButtonsTime[buttonNumber]) > debounceTime)     // If button is active and passes debounce
       {
         if (diagnostics == 1){
-          Serial.print("1, ");
+          Serial.print("1");
+        } else if (diagnostics == 2) {
+          Serial.println(buttonNumber);
         }
         activeButtons[buttonNumber] = 1;                                                        // write a 1 to the storage variable
         activeButtonsTime[buttonNumber] = millis();                                             // and save the last button press time for later debounce comparison.
       }
-      if (buttonState == LOW)
+      else //if (buttonState == LOW)
       {
         if (diagnostics == 1){
-          Serial.print("0, ");
+          Serial.print("0");
         }
         activeButtons[buttonNumber] = 0;                                                        // Or if the button is inactive, write a 0.
       }
-      pinMode(currentRow, INPUT);                                                                 // Set the selected row pin back to INPUT mode (0V / LOW).
+      pinMode(columnPin, INPUT);                                                                 // Set the selected column pin back to INPUT mode (0V / LOW).
     }
-    pinMode(currentColumn, INPUT);                                                                  // Set the selected column pin back to INPUT mode (0V / LOW) and move onto the next column pin.
+    pinMode(rowPin, INPUT);                                                                  // Set the selected row pin back to INPUT mode (0V / LOW).
   }
 }
 
@@ -331,10 +338,10 @@ void loopNoteOn(byte channel, byte pitch, byte velocity)
 
 void commandPress(byte command)
 {
-  if(command == OCTAVEDOWN){
+  if(command == OCT_DN){
     octave -= 12;
     octaveDownState = HIGH;
-  } else if (command == OCTAVEUP){
+  } else if (command == OCT_UP){
     octave += 12;
         octaveUpState = HIGH;
   }
@@ -346,9 +353,9 @@ void commandPress(byte command)
 }
 void commandRelease(byte command)
 {
-  if(command == OCTAVEDOWN){
+  if(command == OCT_DN){
       octaveDownState = LOW;
-  } else if (command == OCTAVEUP){
+  } else if (command == OCT_UP){
     octaveUpState = LOW;
   }
   if (timeBothPressed && currentTime > timeBothPressed + 500){
