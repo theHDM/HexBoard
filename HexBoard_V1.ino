@@ -163,27 +163,32 @@ void readDigitalButtons()
       pinMode(columnPin, INPUT_PULLUP); // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
       byte buttonNumber = columnIndex + (rowIndex * columnCount); // Assign this location in the matrix a unique number.
       delayMicroseconds(50); // Delay to give the pin modes time to change state (false readings are caused otherwise).
+      previousActiveButtons[buttonNumber] = activeButtons[buttonNumber]; // Track the "previous" variable for comparison.
       byte buttonState = digitalRead(columnPin); // (don't)Invert reading due to INPUT_PULLUP, and store the currently selected pin state.
-      if (buttonState == LOW )//&& (millis() - activeButtonsTime[buttonNumber]) > debounceTime)     // If button is active and passes debounce
-      {
+      if (buttonState == LOW ) {
         if (diagnostics == 1){
           Serial.print("1");
         } else if (diagnostics == 2) {
           Serial.println(buttonNumber);
         }
-        activeButtons[buttonNumber] = 1;                                                        // write a 1 to the storage variable
-        activeButtonsTime[buttonNumber] = millis();                                             // and save the last button press time for later debounce comparison.
-      }
-      else //if (buttonState == LOW)
-      {
+        if (!previousActiveButtons[buttonNumber]) {
+          // newpress time
+          activeButtonsTime[buttonNumber] = millis();
+        }
+        // TODO: Implement debounce?
+        activeButtons[buttonNumber] = 1;
+      } else {
+        // Otherwise, the button is inactive, write a 0.
         if (diagnostics == 1){
           Serial.print("0");
         }
-        activeButtons[buttonNumber] = 0;                                                        // Or if the button is inactive, write a 0.
+        activeButtons[buttonNumber] = 0;
       }
-      pinMode(columnPin, INPUT);                                                                 // Set the selected column pin back to INPUT mode (0V / LOW).
+      // Set the selected column pin back to INPUT mode (0V / LOW).
+      pinMode(columnPin, INPUT);
     }
-    pinMode(rowPin, INPUT);                                                                  // Set the selected row pin back to INPUT mode (0V / LOW).
+    // Set the selected row pin back to INPUT mode (0V / LOW).
+    pinMode(rowPin, INPUT);
   }
 }
 
@@ -208,7 +213,6 @@ void playNotes()
           commandRelease(wickiHaydenLayout[i]);
         }
       }
-      previousActiveButtons[i] = activeButtons[i]; // Update the "previous" variable for comparison on next loop
     }
   }
 }
