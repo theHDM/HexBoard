@@ -94,7 +94,7 @@ ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60)
 const byte octUpSW = 10 - 1;
 const byte octDnSW = 30 - 1;
 
-//byte *currentLayout = &wickiHaydenLayout;
+const byte *currentLayout = wickiHaydenLayout;
 
 // Global time variables
 unsigned long   currentTime; // Program loop consistent variable for time in milliseconds since power on
@@ -135,6 +135,7 @@ void setup()
   Serial.begin(115200);
   init_leds();
   setOctLED();
+  setLayoutLED();
 
   // Print diagnostic troubleshooting information to serial monitor
   diagnosticTest();
@@ -150,11 +151,11 @@ void loop()
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
 
-  // Do the LEDS
-  FastLED.show();
-
   // Act on those buttons
   playNotes();
+
+  // Do the LEDS
+  FastLED.show();
 }
 // END LOOP SECTION
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -296,6 +297,24 @@ void setOctLED()
   } else if (octave <= 24) {
     leds[octUpSW] = CRGB::Black; // No higher to go.
     leds[octDnSW] = CRGB::Purple;
+  }
+}
+
+void setLayoutLED()
+{
+  for (int i = 0; i < elementCount; i++) {
+    if (currentLayout[i] <= 127) {
+      switch(currentLayout[i] % 12) {
+        case 0: leds[i] = CRGB::Red; break;
+        case 2: leds[i] = CRGB::Orange; break;
+        case 4: leds[i] = CRGB::Yellow; break;
+        case 5: leds[i] = CRGB::Green; break;
+        case 7: leds[i] = CRGB::Teal; break;
+        case 9: leds[i] = CRGB::Blue; break;
+        case 11: leds[i] = CRGB::Purple; break;
+        default: leds[i] = CRGB::Black; break;
+      }
+    }
   }
 }
 
