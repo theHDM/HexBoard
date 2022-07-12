@@ -49,50 +49,67 @@ const byte elementCount     = columnCount * rowCount;// The number of elements i
 // (see commandPress)
 const int OCT_DN = 128;
 const int OCT_UP = 129;
+const int BT_TOG = 130;
+const int LAY_MD = 131;
+const int LGH_MD = 132;
+const int PTB_DN = 133;
+const int PTB_UP = 134;
 const int UNUSED = 255;
 
 #define ROW_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, ii, iii, iv, v, vi, vii, viii, ix, x
 
 // MIDI note value tables
 const byte wickiHaydenLayout[elementCount] = {
-ROW_FLIP(OCT_UP, 78,  80,  82,  84,  86,  88,  90,  92,  94),
+ROW_FLIP(BT_TOG, 78,  80,  82,  84,  86,  88,  90,  92,  94),
 ROW_FLIP(     71,  73,  75,  77,  79,  81,  83,  85,  87,  89),
-ROW_FLIP(OCT_DN, 66,  68,  70,  72,  74,  76,  78,  80,  82),
+ROW_FLIP(LGH_MD, 66,  68,  70,  72,  74,  76,  78,  80,  82),
 ROW_FLIP(     59,  61,  63,  65,  67,  69,  71,  73,  75,  77),
-ROW_FLIP(UNUSED, 54,  56,  58,  60,  62,  64,  66,  68,  70),
+ROW_FLIP(LAY_MD, 54,  56,  58,  60,  62,  64,  66,  68,  70),
 ROW_FLIP(     47,  49,  51,  53,  55,  57,  59,  61,  63,  65),
-ROW_FLIP(UNUSED, 42,  44,  46,  48,  50,  52,  54,  56,  58),
+ROW_FLIP(OCT_UP, 42,  44,  46,  48,  50,  52,  54,  56,  58),
 ROW_FLIP(     35,  37,  39,  41,  43,  45,  47,  49,  51,  53),
-ROW_FLIP(UNUSED, 30,  32,  34,  36,  38,  40,  42,  44,  46),
-ROW_FLIP(     23,  25,  27,  29,  31,  33,  35,  37,  39,  41)
+ROW_FLIP(OCT_DN, 30,  32,  34,  36,  38,  40,  42,  44,  46),
+ROW_FLIP(     23,  25,  27,  29,  31,  33,  35,  37,  39,  41),
+ROW_FLIP(PTB_UP, 18,  20,  22,  24,  26,  28,  30,  32,  34),
+ROW_FLIP(     11,  13,  15,  17,  19,  21,  23,  25,  27,  29),
+ROW_FLIP(PTB_DN,  6,   8,  10,  12,  14,  16,  18,  20,  22),
+ROW_FLIP( UNUSED,   1,   3,   5,   7,   9,  11,  13,  15,  17) // Oops, wasted key!
 };
 const byte harmonicTableLayout[elementCount] = {
-ROW_FLIP(OCT_UP, 20,  27,  34,  41,  48,  55,  62,  69,  76),
+ROW_FLIP(BT_TOG, 20,  27,  34,  41,  48,  55,  62,  69,  76),
 ROW_FLIP(     17,  24,  31,  38,  45,  52,  59,  66,  73,  80),
-ROW_FLIP(OCT_DN, 21,  28,  35,  42,  49,  56,  63,  70,  77),
+ROW_FLIP(LGH_MD, 21,  28,  35,  42,  49,  56,  63,  70,  77),
 ROW_FLIP(     18,  25,  32,  39,  46,  53,  60,  67,  74,  81),
-ROW_FLIP(UNUSED, 22,  29,  36,  43,  50,  57,  64,  71,  78),
+ROW_FLIP(LAY_MD, 22,  29,  36,  43,  50,  57,  64,  71,  78),
 ROW_FLIP(     19,  26,  33,  40,  47,  54,  61,  68,  75,  82),
-ROW_FLIP(UNUSED, 23,  30,  37,  44,  51,  58,  65,  72,  79),
+ROW_FLIP(OCT_UP, 23,  30,  37,  44,  51,  58,  65,  72,  79),
 ROW_FLIP(     20,  27,  34,  41,  48,  55,  62,  69,  76,  83),
-ROW_FLIP(UNUSED, 24,  31,  38,  45,  52,  59,  66,  73,  80),
-ROW_FLIP(     21,  28,  35,  42,  49,  56,  63,  70,  77,  84)
+ROW_FLIP(OCT_DN, 24,  31,  38,  45,  52,  59,  66,  73,  80),
+ROW_FLIP(     21,  28,  35,  42,  49,  56,  63,  70,  77,  84),
+ROW_FLIP(PTB_UP, 25,  32,  39,  46,  53,  60,  67,  74,  81),
+ROW_FLIP(     22,  29,  36,  43,  50,  57,  64,  71,  78,  85),
+ROW_FLIP(PTB_DN, 26,  33,  40,  47,  54,  61,  68,  75,  82),
+ROW_FLIP(     23,  30,  37,  44,  51,  58,  65,  72,  79,  86)
 };
 const byte gerhardLayout[elementCount] = {
-ROW_FLIP(OCT_UP, 20,  21,  22,  23,  24,  25,  26,  27,  28),
+ROW_FLIP(BT_TOG, 20,  21,  22,  23,  24,  25,  26,  27,  28),
 ROW_FLIP(     23,  24,  25,  26,  27,  28,  29,  30,  31,  32),
-ROW_FLIP(OCT_DN, 27,  28,  29,  30,  31,  32,  33,  34,  35),
+ROW_FLIP(LGH_MD, 27,  28,  29,  30,  31,  32,  33,  34,  35),
 ROW_FLIP(     30,  31,  32,  33,  34,  35,  36,  37,  38,  39),
-ROW_FLIP(UNUSED, 34,  35,  36,  37,  38,  39,  40,  41,  42),
+ROW_FLIP(LAY_MD, 34,  35,  36,  37,  38,  39,  40,  41,  42),
 ROW_FLIP(     37,  38,  39,  40,  41,  42,  43,  44,  45,  46),
-ROW_FLIP(UNUSED, 41,  42,  43,  44,  45,  46,  47,  48,  49),
+ROW_FLIP(OCT_UP, 41,  42,  43,  44,  45,  46,  47,  48,  49),
 ROW_FLIP(     44,  45,  46,  47,  48,  49,  50,  51,  52,  53),
-ROW_FLIP(UNUSED, 48,  49,  50,  51,  52,  53,  54,  55,  56),
-ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60)
+ROW_FLIP(OCT_DN, 48,  49,  50,  51,  52,  53,  54,  55,  56),
+ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60),
+ROW_FLIP(PTB_UP, 55,  56,  57,  58,  59,  60,  61,  62,  63),
+ROW_FLIP(     58,  59,  60,  61,  62,  63,  64,  65,  66,  67),
+ROW_FLIP(PTB_DN, 62,  63,  64,  65,  66,  67,  68,  69,  70),
+ROW_FLIP(     65,  66,  67,  68,  69,  70,  71,  72,  73,  74)
 };
 // LEDs for OCT_UP/OCT_DN status.
-const byte octUpSW = 10 - 1;
-const byte octDnSW = 30 - 1;
+const byte octUpSW = 70 - 1;
+const byte octDnSW = 90 - 1;
 
 const byte *currentLayout = wickiHaydenLayout;
 
@@ -260,9 +277,9 @@ void loopNoteOn(byte channel, byte pitch, byte velocity)
 
 void commandPress(byte command)
 {
-  // Keep octave between -12 and 24
+  // Keep octave between ~-12~ 0 and 24
   if(command == OCT_DN) {
-    if (octave >= 0) {
+    if (octave >= 12) {
       octave -= 12;
       setOctLED(); leds[octDnSW] = CRGB::White;
     }
@@ -285,12 +302,12 @@ void commandRelease(byte command)
 
 void setOctLED()
 {
-  if (octave <= -12) {
+  /*if (octave <= -12) {
     leds[octUpSW].setRGB(0xA0, 0, 0x20);
     leds[octDnSW] = CRGB::Black; // No lower to go.
-  } else if (octave <= 0) {
+  } else */if (octave <= 0) {
     leds[octUpSW] = CRGB::Purple;
-    leds[octDnSW] = CRGB::Red;
+    leds[octDnSW] = CRGB::Black; // No lower to go.
   } else if (octave <= 12) {
     leds[octUpSW] = CRGB::Blue;
     leds[octDnSW].setRGB(0xA0, 0, 0x20);
