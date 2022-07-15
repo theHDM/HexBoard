@@ -242,17 +242,17 @@ void playNotes()
     {
       if (activeButtons[i] == 1) // If the button is active (newpress)
       {
-        if (wickiHaydenLayout[i] < 128) {
-          noteOn(midiChannel, (wickiHaydenLayout[i] + octave) % 128 , velocity);
+        if (currentLayout[i] < 128) {
+          noteOn(midiChannel, (currentLayout[i] + octave) % 128 , velocity);
         } else {
-          commandPress(wickiHaydenLayout[i]);
+          commandPress(currentLayout[i]);
         }
       } else {
       // If the button is inactive (released)
-        if (wickiHaydenLayout[i] < 128) {
-          noteOff(midiChannel, (wickiHaydenLayout[i] + octave) % 128, 0);
+        if (currentLayout[i] < 128) {
+          noteOff(midiChannel, (currentLayout[i] + octave) % 128, 0);
         } else {
-          commandRelease(wickiHaydenLayout[i]);
+          commandRelease(currentLayout[i]);
         }
       }
     }
@@ -288,6 +288,15 @@ void commandPress(byte command)
       octave += 12;
       setOctLED(); leds[octUpSW] = CRGB::White;
     }
+  } else if (command == LAY_MD) {
+    if (currentLayout == wickiHaydenLayout) {
+      currentLayout = harmonicTableLayout;
+    } else if (currentLayout == harmonicTableLayout) {
+      currentLayout = gerhardLayout;
+    } else {
+      currentLayout = wickiHaydenLayout;
+    }
+    setLayoutLED();
   }
 }
 void commandRelease(byte command)
