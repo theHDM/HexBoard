@@ -153,7 +153,7 @@ void setup()
   Serial.begin(115200);
   init_leds();
   setOctLED();
-  setLayoutLED();
+  setLayoutLEDs();
   leds[layMdSW] = CRGB::Red;
 
   // Print diagnostic troubleshooting information to serial monitor
@@ -245,6 +245,7 @@ void playNotes()
       if (activeButtons[i] == 1) // If the button is active (newpress)
       {
         if (currentLayout[i] < 128) {
+          leds[i] = CRGB::White;
           noteOn(midiChannel, (currentLayout[i] + octave) % 128 , velocity);
         } else {
           commandPress(currentLayout[i]);
@@ -252,6 +253,7 @@ void playNotes()
       } else {
       // If the button is inactive (released)
         if (currentLayout[i] < 128) {
+          setLayoutLED(i);
           noteOff(midiChannel, (currentLayout[i] + octave) % 128, 0);
         } else {
           commandRelease(currentLayout[i]);
@@ -298,7 +300,7 @@ void commandPress(byte command)
     } else {
       currentLayout = wickiHaydenLayout;
     }
-    setLayoutLED();
+    setLayoutLEDs();
   }
 }
 void commandRelease(byte command)
@@ -328,21 +330,24 @@ void setOctLED()
   }
 }
 
-void setLayoutLED()
+void setLayoutLEDs()
 {
   for (int i = 0; i < elementCount; i++) {
     if (currentLayout[i] <= 127) {
-      leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 200);
-      // black keys darker
-      switch(currentLayout[i] % 12) {
-        case 1:
-        case 3:
-        case 6:
-        case 8:
-        case 10: leds[i] >>= 2; break;
-        default: break;
-      }
+      setLayoutLED(i);
     }
+  }
+}
+void setLayoutLED(int i) {
+  leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 200);
+  // black keys darker
+  switch(currentLayout[i] % 12) {
+    case 1:
+    case 3:
+    case 6:
+    case 8:
+    case 10: leds[i] >>= 2; break;
+    default: break;
   }
 }
 
