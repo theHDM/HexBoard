@@ -10,7 +10,7 @@ CRGB leds[NUM_LEDS];
 void init_leds()
 {
   FastLED.addLeds<WS2811, LEDS_PIN, RGB>(leds, NUM_LEDS);
-  FastLED.setBrightness(50);
+  FastLED.setBrightness(100);
   for (int i=0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
@@ -332,15 +332,15 @@ void setLayoutLED()
 {
   for (int i = 0; i < elementCount; i++) {
     if (currentLayout[i] <= 127) {
+      leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 200);
+      // black keys darker
       switch(currentLayout[i] % 12) {
-        case 0: leds[i] = CRGB::Red; break;
-        case 2: leds[i] = CRGB::Orange; break;
-        case 4: leds[i] = CRGB::Yellow; break;
-        case 5: leds[i] = CRGB::Green; break;
-        case 7: leds[i] = CRGB::Teal; break;
-        case 9: leds[i] = CRGB::Blue; break;
-        case 11: leds[i] = CRGB::Purple; break;
-        default: leds[i] = CRGB::Black; break;
+        case 1:
+        case 3:
+        case 6:
+        case 8:
+        case 10: leds[i] >>= 2; break;
+        default: break;
       }
     }
   }
