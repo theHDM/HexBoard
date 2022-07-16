@@ -110,6 +110,7 @@ ROW_FLIP(     65,  66,  67,  68,  69,  70,  71,  72,  73,  74)
 // LEDs for OCT_UP/OCT_DN status.
 const byte octUpSW = 70 - 1;
 const byte octDnSW = 90 - 1;
+const byte layMdSW = 50 - 1;
 
 const byte *currentLayout = wickiHaydenLayout;
 
@@ -153,6 +154,7 @@ void setup()
   init_leds();
   setOctLED();
   setLayoutLED();
+  leds[layMdSW] = CRGB::Red;
 
   // Print diagnostic troubleshooting information to serial monitor
   diagnosticTest();
