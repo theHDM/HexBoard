@@ -2,18 +2,107 @@
 // Teensy LC set to 48MHz with USB type MIDI
 #include <FastLED.h>
 
+#include "Adafruit_BLE.h"
+#include "Adafruit_BluefruitLE_UART.h"
+#include "Adafruit_BLEMIDI.h"
+#include "BluefruitConfig.h"
+
+#define FACTORYRESET_ENABLE         0
+#define MINIMUM_FIRMWARE_VERSION    "0.7.0"
+
 #define LEDS_PIN 17
 #define NUM_LEDS 140
+
+Adafruit_BluefruitLE_UART ble(Serial1, -1);
+
+Adafruit_BLEMIDI blemidi(ble);
+
+bool bleModuleEnabled = false;
+
+bool isConnected = false;
+
+// Bluetooth error messages
+void error(const __FlashStringHelper*err) {
+  Serial.println(err);
+  while (1);
+}
+//Bluetooth callbacks
+void connected(void)
+{
+  isConnected = true;
+  Serial.println("CONNECTED!");
+  //Zach make bluetooth light go solid once connected
+}
+void disconnected(void)
+{
+  Serial.println("disconnected");
+  isConnected = false;
+  //Zach make bluetooth light start blinking again once disconnected
+}
 
 CRGB leds[NUM_LEDS];
 
 void init_leds()
 {
   FastLED.addLeds<WS2811, LEDS_PIN, RGB>(leds, NUM_LEDS);
-  FastLED.setBrightness(100);
+  /*Max Brightness. Recommended 100 or lower for usb power to stay under 2 amps. Increase up to 255 at your own risk.
+  Board can handle full power (theoretically 8.4 amps at max brightness) while only getting warm, but external power
+  is required to meet this. Use capable power supply on EXT PWR headers.*/
+  FastLED.setBrightness(200);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5,1000);
   for (int i=0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
+}
+
+bool bluetooth = false;
+void init_bluetooth()
+{
+/* Initialise the module */
+  Serial.print(F("Initialising the Bluefruit LE module: "));
+
+  if ( !ble.begin(VERBOSE_MODE) )
+  {
+    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
+  }
+  Serial.println( F("OK!") );
+
+  if ( FACTORYRESET_ENABLE )
+  {
+    /* Perform a factory reset to make sure everything is in a known state */
+    Serial.println(F("Performing a factory reset: "));
+    if ( ! ble.factoryReset() ) {
+      error(F("Couldn't factory reset"));
+    }
+  }
+
+  //ble.sendCommandCheckOK(F("AT+uartflow=off"));
+  ble.echo(false);
+
+  Serial.println("Requesting Bluefruit info:");
+  /* Print Bluefruit information */
+  ble.info();
+
+  /* Set BLE callbacks */
+  ble.setConnectCallback(connected);
+  ble.setDisconnectCallback(disconnected);
+
+  Serial.println(F("Enable MIDI: "));
+  if ( ! blemidi.begin(true) )
+  {
+    error(F("Could not enable Bluetooth MIDI"));
+  }
+
+  ble.verbose(false);
+  Serial.print(F("Waiting for a connection..."));
+  
+  bluetooth = true;
+  //Zach add bluetooth button blinking here until connection made
+}
+void shutdown_bluetooth()
+{
+  ble.end();
+  bluetooth = false;
 }
 
 //
@@ -35,7 +124,7 @@ void init_leds()
 //        140 139 138 137 136 135 134 133 132 131
 
 //DIAGNOSTICS
-int diagnostics = 1;
+int diagnostics = 0;
 
 // Define digital button matrix pins
 const byte columns[] = { 25, 24,  9,  8,  7,  6,  5,  4,  3,  2};                // Column pins in order from right to left
@@ -57,55 +146,58 @@ const int PTB_UP = 134;
 const int UNUSED = 255;
 
 #define ROW_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, ii, iii, iv, v, vi, vii, viii, ix, x
+//hacky macro because we typed them in wrong???
+//#define NO_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, x, ix, viii, vii, vi, v, iv, iii, ii
+
 
 // MIDI note value tables
 const byte wickiHaydenLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 78,  80,  82,  84,  86,  88,  90,  92,  94),
+ROW_FLIP(BT_TOG, 90,  92,  94,  96,  98, 100, 102, 104, 106),
+ROW_FLIP(     83,  85,  87,  89,  91,  93,  95,  97,  99, 101),
+ROW_FLIP(LGH_MD, 78,  80,  82,  84,  86,  88,  90,  92,  94),
 ROW_FLIP(     71,  73,  75,  77,  79,  81,  83,  85,  87,  89),
-ROW_FLIP(LGH_MD, 66,  68,  70,  72,  74,  76,  78,  80,  82),
+ROW_FLIP(LAY_MD, 66,  68,  70,  72,  74,  76,  78,  80,  82),
 ROW_FLIP(     59,  61,  63,  65,  67,  69,  71,  73,  75,  77),
-ROW_FLIP(LAY_MD, 54,  56,  58,  60,  62,  64,  66,  68,  70),
+ROW_FLIP(OCT_UP, 54,  56,  58,  60,  62,  64,  66,  68,  70),
 ROW_FLIP(     47,  49,  51,  53,  55,  57,  59,  61,  63,  65),
-ROW_FLIP(OCT_UP, 42,  44,  46,  48,  50,  52,  54,  56,  58),
+ROW_FLIP(OCT_DN, 42,  44,  46,  48,  50,  52,  54,  56,  58),
 ROW_FLIP(     35,  37,  39,  41,  43,  45,  47,  49,  51,  53),
-ROW_FLIP(OCT_DN, 30,  32,  34,  36,  38,  40,  42,  44,  46),
+ROW_FLIP(PTB_UP, 30,  32,  34,  36,  38,  40,  42,  44,  46),
 ROW_FLIP(     23,  25,  27,  29,  31,  33,  35,  37,  39,  41),
-ROW_FLIP(PTB_UP, 18,  20,  22,  24,  26,  28,  30,  32,  34),
-ROW_FLIP(     11,  13,  15,  17,  19,  21,  23,  25,  27,  29),
-ROW_FLIP(PTB_DN,  6,   8,  10,  12,  14,  16,  18,  20,  22),
-ROW_FLIP( UNUSED,   1,   3,   5,   7,   9,  11,  13,  15,  17) // Oops, wasted key!
+ROW_FLIP(PTB_DN, 18,  20,  22,  24,  26,  28,  30,  32,  34),
+ROW_FLIP(     11,  13,  15,  17,  19,  21,  23,  25,  27,  29)
 };
 const byte harmonicTableLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 20,  27,  34,  41,  48,  55,  62,  69,  76),
-ROW_FLIP(     17,  24,  31,  38,  45,  52,  59,  66,  73,  80),
-ROW_FLIP(LGH_MD, 21,  28,  35,  42,  49,  56,  63,  70,  77),
-ROW_FLIP(     18,  25,  32,  39,  46,  53,  60,  67,  74,  81),
-ROW_FLIP(LAY_MD, 22,  29,  36,  43,  50,  57,  64,  71,  78),
-ROW_FLIP(     19,  26,  33,  40,  47,  54,  61,  68,  75,  82),
-ROW_FLIP(OCT_UP, 23,  30,  37,  44,  51,  58,  65,  72,  79),
-ROW_FLIP(     20,  27,  34,  41,  48,  55,  62,  69,  76,  83),
-ROW_FLIP(OCT_DN, 24,  31,  38,  45,  52,  59,  66,  73,  80),
-ROW_FLIP(     21,  28,  35,  42,  49,  56,  63,  70,  77,  84),
-ROW_FLIP(PTB_UP, 25,  32,  39,  46,  53,  60,  67,  74,  81),
-ROW_FLIP(     22,  29,  36,  43,  50,  57,  64,  71,  78,  85),
-ROW_FLIP(PTB_DN, 26,  33,  40,  47,  54,  61,  68,  75,  82),
-ROW_FLIP(     23,  30,  37,  44,  51,  58,  65,  72,  79,  86)
+ROW_FLIP(BT_TOG, 83,  76,  69,  62,  55,  48,  41,  34,  27),
+ROW_FLIP(     86,  79,  72,  65,  58,  51,  44,  37,  30,  23),
+ROW_FLIP(LGH_MD, 82,  75,  68,  61,  54,  47,  40,  33,  26),
+ROW_FLIP(     85,  78,  71,  64,  57,  50,  43,  36,  29,  22),
+ROW_FLIP(LAY_MD, 81,  74,  67,  60,  53,  46,  39,  32,  25),
+ROW_FLIP(     84,  77,  70,  63,  56,  49,  42,  35,  28,  21),
+ROW_FLIP(OCT_UP, 80,  73,  66,  59,  52,  45,  38,  31,  24),
+ROW_FLIP(     83,  76,  69,  62,  55,  48,  41,  34,  27,  20),
+ROW_FLIP(OCT_DN, 79,  72,  65,  58,  51,  44,  37,  30,  23),
+ROW_FLIP(     82,  75,  68,  61,  54,  47,  40,  33,  26,  19),
+ROW_FLIP(PTB_UP, 78,  71,  64,  57,  50,  43,  36,  29,  22),
+ROW_FLIP(     81,  74,  67,  60,  53,  46,  39,  32,  25,  18),
+ROW_FLIP(PTB_DN, 77,  70,  63,  56,  49,  42,  35,  28,  21),
+ROW_FLIP(     80,  73,  66,  59,  52,  45,  38,  31,  24,  17)
 };
 const byte gerhardLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 20,  21,  22,  23,  24,  25,  26,  27,  28),
-ROW_FLIP(     23,  24,  25,  26,  27,  28,  29,  30,  31,  32),
-ROW_FLIP(LGH_MD, 27,  28,  29,  30,  31,  32,  33,  34,  35),
-ROW_FLIP(     30,  31,  32,  33,  34,  35,  36,  37,  38,  39),
-ROW_FLIP(LAY_MD, 34,  35,  36,  37,  38,  39,  40,  41,  42),
-ROW_FLIP(     37,  38,  39,  40,  41,  42,  43,  44,  45,  46),
-ROW_FLIP(OCT_UP, 41,  42,  43,  44,  45,  46,  47,  48,  49),
-ROW_FLIP(     44,  45,  46,  47,  48,  49,  50,  51,  52,  53),
-ROW_FLIP(OCT_DN, 48,  49,  50,  51,  52,  53,  54,  55,  56),
-ROW_FLIP(     51,  52,  53,  54,  55,  56,  57,  58,  59,  60),
-ROW_FLIP(PTB_UP, 55,  56,  57,  58,  59,  60,  61,  62,  63),
-ROW_FLIP(     58,  59,  60,  61,  62,  63,  64,  65,  66,  67),
-ROW_FLIP(PTB_DN, 62,  63,  64,  65,  66,  67,  68,  69,  70),
-ROW_FLIP(     65,  66,  67,  68,  69,  70,  71,  72,  73,  74)
+ROW_FLIP(BT_TOG, 74,  73,  72,  71,  70,  69,  68,  67,  66),
+ROW_FLIP(     71,  70,  69,  68,  67,  66,  65,  64,  63,  62),
+ROW_FLIP(LGH_MD, 67,  66,  65,  64,  63,  62,  61,  60,  59),
+ROW_FLIP(     64,  63,  62,  61,  60,  59,  58,  57,  56,  55),
+ROW_FLIP(LAY_MD, 60,  59,  58,  57,  56,  55,  54,  53,  52),
+ROW_FLIP(     57,  56,  55,  54,  53,  52,  51,  50,  49,  48),
+ROW_FLIP(OCT_UP, 53,  52,  51,  50,  49,  48,  47,  46,  45),
+ROW_FLIP(     50,  49,  48,  47,  46,  45,  44,  43,  42,  41),
+ROW_FLIP(OCT_DN, 46,  45,  44,  43,  42,  41,  40,  39,  38),
+ROW_FLIP(     43,  42,  41,  40,  39,  38,  37,  36,  35,  34),
+ROW_FLIP(PTB_UP, 39,  38,  37,  36,  35,  34,  33,  32,  31),
+ROW_FLIP(     36,  35,  34,  33,  32,  31,  30,  29,  28,  27),
+ROW_FLIP(PTB_DN, 32,  31,  30,  29,  28,  27,  26,  25,  24),
+ROW_FLIP(     29,  28,  27,  26,  25,  24,  23,  22,  21,  20)
 };
 // LEDs for OCT_UP/OCT_DN status.
 const byte octUpSW = 70 - 1;
@@ -128,14 +220,11 @@ unsigned long   activeButtonsTime[elementCount];                        // Array
 // MIDI channel assignment
 byte midiChannel = 0;                                                   // Current MIDI channel (changed via user input)
 
-// MIDI program variables
-byte midiProgram[16];                                                   // MIDI program selection per channel (0-15)
-
 // Octave modifier
 int octave = 0;// Apply a MIDI note number offset (changed via user input in steps of 12)
 
 // Velocity levels
-byte velocity = 95;                                                     // Non-zero default velocity for testing; this will update via analog pot
+byte velocity = 95;                                                     // Default velocity
 // END SETUP SECTION
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -151,6 +240,9 @@ void setup()
     pinMode(rows[pinNumber], INPUT);                                            // Set the pinMode to INPUT (0V / LOW).
   }
   Serial.begin(115200);
+  if (bleModuleEnabled == true){
+    init_bluetooth();
+  }
   init_leds();
   setOctLED();
   setLayoutLEDs();
@@ -172,6 +264,9 @@ void loop()
 
   // Act on those buttons
   playNotes();
+
+  // Held Buttons
+  heldButtons();
 
   // Do the LEDS
   FastLED.show();
@@ -245,7 +340,8 @@ void playNotes()
       if (activeButtons[i] == 1) // If the button is active (newpress)
       {
         if (currentLayout[i] < 128) {
-          leds[i] = CRGB::White;
+          //leds[i] = CRGB::White;
+          leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 255);
           noteOn(midiChannel, (currentLayout[i] + octave) % 128 , velocity);
         } else {
           commandPress(currentLayout[i]);
@@ -254,6 +350,7 @@ void playNotes()
       // If the button is inactive (released)
         if (currentLayout[i] < 128) {
           setLayoutLED(i);
+          //leds[i] ;
           noteOff(midiChannel, (currentLayout[i] + octave) % 128, 0);
         } else {
           commandRelease(currentLayout[i]);
@@ -263,20 +360,36 @@ void playNotes()
   }
 }
 
+void heldButtons()
+{
+  for (int i = 0; i < elementCount; i++) {
+    if (activeButtons[i]) {
+      //if (
+    }
+  }
+}
+
 // MIDI PACKET FUNCTIONS
 
 // Send MIDI Note On
-// 1st byte = Event type (0x09 = note on, 0x08 = note off).
-// 2nd byte = Event type bitwise ORed with MIDI channel.
-// 3rd byte = MIDI note number.
-// 4th byte = Velocity (7-bit range 0-127)
 void noteOn(byte channel, byte pitch, byte velocity)
 {
-  usbMIDI.sendNoteOn(pitch, velocity, channel);
+  if (isConnected == true){
+    blemidi.send(0x90, pitch, velocity);
+  }
+  else {
+    usbMIDI.sendNoteOn(pitch, velocity, channel);
+  }
 }
-void loopNoteOn(byte channel, byte pitch, byte velocity)
+// Send MIDI Note Off
+void noteOff(byte channel, byte pitch, byte velocity)
 {
-
+  if (isConnected == true){
+    blemidi.send(0x80, pitch, velocity);
+  }
+  else {
+    usbMIDI.sendNoteOff(pitch, velocity, channel);
+  }
 }
 
 void commandPress(byte command)
@@ -339,7 +452,7 @@ void setLayoutLEDs()
   }
 }
 void setLayoutLED(int i) {
-  leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 200);
+  leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 120);
   // black keys darker
   switch(currentLayout[i] % 12) {
     case 1:
@@ -351,39 +464,12 @@ void setLayoutLED(int i) {
   }
 }
 
-// Send MIDI Note Off
-// 1st byte = Event type (0x09 = note on, 0x08 = note off).
-// 2nd byte = Event type bitwise ORed with MIDI channel.
-// 3rd byte = MIDI note number.
-// 4th byte = Velocity (7-bit range 0-127)
-void noteOff(byte channel, byte pitch, byte velocity)
-{
-  usbMIDI.sendNoteOff(pitch, velocity, channel);
-}
-void loopNoteOff(byte channel, byte pitch, byte velocity)
-{
-
-}
-
 // Control Change
 // 1st byte = Event type (0x0B = Control Change).
 // 2nd byte = Event type bitwise ORed with MIDI channel.
 // 3rd byte = MIDI CC number (7-bit range 0-127).
 // 4th byte = Control value (7-bit range 0-127).
 void controlChange(byte channel, byte control, byte value)
-{
-
-}
-void loopControlChange(byte channel, byte control, byte value)
-{
-
-}
-
-// Program Change
-// 1st byte = Event type (0x0C = Program Change).
-// 2nd byte = Event type bitwise ORed with MIDI channel.
-// 3rd byte = Program value (7-bit range 0-127).
-void programChange(byte channel, byte value)
 {
 
 }
@@ -395,10 +481,6 @@ void programChange(byte channel, byte value)
 // 3rd byte = The 7 least significant bits of the value.
 // 4th byte = The 7 most significant bits of the value.
 void pitchBendChange(byte channel, byte lowValue, byte highValue)
-{
-
-}
-void loopPitchBendChange(byte channel, byte lowValue, byte highValue)
 {
 
 }
