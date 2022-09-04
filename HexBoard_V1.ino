@@ -143,6 +143,7 @@ const int LAY_MD = 131;
 const int LGH_MD = 132;
 const int PTB_DN = 133;
 const int PTB_UP = 134;
+const int BK_TOG = 135;
 const int UNUSED = 255;
 
 #define ROW_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, ii, iii, iv, v, vi, vii, viii, ix, x
@@ -152,7 +153,7 @@ const int UNUSED = 255;
 
 // MIDI note value tables
 const byte wickiHaydenLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 90,  92,  94,  96,  98, 100, 102, 104, 106),
+ROW_FLIP(BK_TOG, 90,  92,  94,  96,  98, 100, 102, 104, 106),
 ROW_FLIP(     83,  85,  87,  89,  91,  93,  95,  97,  99, 101),
 ROW_FLIP(LGH_MD, 78,  80,  82,  84,  86,  88,  90,  92,  94),
 ROW_FLIP(     71,  73,  75,  77,  79,  81,  83,  85,  87,  89),
@@ -168,7 +169,7 @@ ROW_FLIP(PTB_DN, 18,  20,  22,  24,  26,  28,  30,  32,  34),
 ROW_FLIP(     11,  13,  15,  17,  19,  21,  23,  25,  27,  29)
 };
 const byte harmonicTableLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 83,  76,  69,  62,  55,  48,  41,  34,  27),
+ROW_FLIP(BK_TOG, 83,  76,  69,  62,  55,  48,  41,  34,  27),
 ROW_FLIP(     86,  79,  72,  65,  58,  51,  44,  37,  30,  23),
 ROW_FLIP(LGH_MD, 82,  75,  68,  61,  54,  47,  40,  33,  26),
 ROW_FLIP(     85,  78,  71,  64,  57,  50,  43,  36,  29,  22),
@@ -184,7 +185,7 @@ ROW_FLIP(PTB_DN, 77,  70,  63,  56,  49,  42,  35,  28,  21),
 ROW_FLIP(     80,  73,  66,  59,  52,  45,  38,  31,  24,  17)
 };
 const byte gerhardLayout[elementCount] = {
-ROW_FLIP(BT_TOG, 74,  73,  72,  71,  70,  69,  68,  67,  66),
+ROW_FLIP(BK_TOG, 74,  73,  72,  71,  70,  69,  68,  67,  66),
 ROW_FLIP(     71,  70,  69,  68,  67,  66,  65,  64,  63,  62),
 ROW_FLIP(LGH_MD, 67,  66,  65,  64,  63,  62,  61,  60,  59),
 ROW_FLIP(     64,  63,  62,  61,  60,  59,  58,  57,  56,  55),
@@ -222,6 +223,8 @@ byte midiChannel = 0;                                                   // Curre
 
 // Octave modifier
 int octave = 0;// Apply a MIDI note number offset (changed via user input in steps of 12)
+
+bool blackKeys = true; // whether the black keys should be dimmer
 
 // Velocity levels
 byte velocity = 95;                                                     // Default velocity
@@ -414,6 +417,9 @@ void commandPress(byte command)
       currentLayout = wickiHaydenLayout;
     }
     setLayoutLEDs();
+  } else if (command == BK_TOG) {
+    blackKeys = !blackKeys;
+    setLayoutLEDs();
   }
 }
 void commandRelease(byte command)
@@ -454,13 +460,19 @@ void setLayoutLEDs()
 void setLayoutLED(int i) {
   leds[i] = CHSV((currentLayout[i] % 12) * 21, 255, 120);
   // black keys darker
-  switch(currentLayout[i] % 12) {
-    case 1:
-    case 3:
-    case 6:
-    case 8:
-    case 10: leds[i] >>= 2; break;
-    default: break;
+  if(blackKeys){
+    // LEET programmers stuff
+    switch(currentLayout[i] % 12) {
+      // If it is one of the black keys, fall through to case 10.
+      case 1:
+      case 3:
+      case 6:
+      case 8:
+      // bitshift by 2 (efficient division by four)
+      case 10: leds[i] >>= 2; break;
+      // otherwise it was a white key. Do nothing
+      default: break;
+    }
   }
 }
 
