@@ -158,23 +158,23 @@ const byte gerhardLayout[elementCount] = {
 const byte *currentLayout = wickiHaydenLayout;
 
 const unsigned int pitches[128] = {
-	16,17,18,19,21,22,23,25,26,28,29,31,                         // Octave 0
-	33,35,37,39,41,44,46,49,52,55,58,62,                         // Octave 1
-	 65, 69, 73, 78, 82, 87, 93, 98,104,110,117,123,             // Octave 2
-	131,139,147,156,165,175,185,196,208,220,233,247,             // Octave 3
-	262,277,294,311,330,349,370,392,415,440,466,494,             // Octave 4
-	523,554,587,622,659,698,740,784,831,880,932,988,             // Octave 5
-	1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976, // Octave 6
-	2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951, // Octave 7
-	4186,4435,4699,4978,5274,5588,5920,6272,6645,7040,7459,7902, // Octave 8
-	8372,8870,9397,9956,10548,11175,11840,12544,13290,14080,14917,15804, //9
-	16744, // C10
-	17740, // C#10
-	18795, // D10
-	19912, // D#10
-	21096, // E10
-	22350, // F10
-	23680  // F#10
+  16,17,18,19,21,22,23,25,26,28,29,31,                         // Octave 0
+  33,35,37,39,41,44,46,49,52,55,58,62,                         // Octave 1
+   65, 69, 73, 78, 82, 87, 93, 98,104,110,117,123,             // Octave 2
+  131,139,147,156,165,175,185,196,208,220,233,247,             // Octave 3
+  262,277,294,311,330,349,370,392,415,440,466,494,             // Octave 4
+  523,554,587,622,659,698,740,784,831,880,932,988,             // Octave 5
+  1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976, // Octave 6
+  2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951, // Octave 7
+  4186,4435,4699,4978,5274,5588,5920,6272,6645,7040,7459,7902, // Octave 8
+  8372,8870,9397,9956,10548,11175,11840,12544,13290,14080,14917,15804, //9
+  16744, // C10
+  17740, // C#10
+  18795, // D10
+  19912, // D#10
+  21096, // E10
+  22350, // F10
+  23680  // F#10
 };
 #define TONEPIN 23
 
@@ -461,6 +461,18 @@ void heldButtons() {
   }
 }
 
+// Return the first note that is currently held.
+byte getHeldNote() {
+  for (int i = 0; i < elementCount; i++) {
+    if (activeButtons[i]) {
+      if (currentLayout[i] < 128) {
+        return (currentLayout[i] + transpose) % 128;
+      }
+    }
+  }
+  return 128;
+}
+
 // MIDI AND OTHER OUTPUTS //
 // Send Note On
 void noteOn(byte channel, byte pitch, byte velocity) {
@@ -480,6 +492,12 @@ void noteOn(byte channel, byte pitch, byte velocity) {
 void noteOff(byte channel, byte pitch, byte velocity) {
   MIDI.sendNoteOff(pitch, velocity, channel);
   noTone(TONEPIN);
+  if(buzzer) {
+    byte anotherPitch = getHeldNote();
+    if (anotherPitch < 128) {
+      tone(TONEPIN, pitches[anotherPitch], 1000);
+    }
+  }
 }
 
 // LEDS //
