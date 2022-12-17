@@ -357,16 +357,19 @@ void commandPress(byte command) {
     midiVelocity = 100;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, defaultBrightness));
+    strip.setBrightness(255);  // Set BRIGHTNESS (max = 255)
   }
   if (command == CMDB_2) {
     midiVelocity = 60;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn2, strip.ColorHSV(65536 / 3, 255, defaultBrightness));
+    strip.setBrightness(127);  // Set BRIGHTNESS (max = 255)
   }
   if (command == CMDB_3) {
     midiVelocity = 20;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, defaultBrightness));
+    strip.setBrightness(63);  // Set BRIGHTNESS (max = 255)
   }
   if (command == CMDB_4) {
   }
