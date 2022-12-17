@@ -283,8 +283,8 @@ void setup() {
   setupMenu();
   menu.drawMenu();
 
-  // wait until device mounted
-  while (!TinyUSBDevice.mounted()) delay(1);
+  // wait until device mounted, maybe
+  for (int i=0; i<5 && !TinyUSBDevice.mounted();i++) delay(1);
 
   // Print diagnostic troubleshooting information to serial monitor
   diagnosticTest();
