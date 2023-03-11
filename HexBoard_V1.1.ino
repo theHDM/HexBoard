@@ -199,6 +199,14 @@ byte activeButtons[elementCount];               // Array to hold current note bu
 byte previousActiveButtons[elementCount];       // Array to hold previous note button states for comparison
 unsigned long activeButtonsTime[elementCount];  // Array to track last note button activation time for debounce
 
+// Variables for sequencer mode
+typedef struct {
+  bool steps[32] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  bool bank = 0;
+  int state = 0;// TODO: change to enum: normal, mute, solo, mute&solo
+} Lane;
+Lane lanes[7];
+
 // MENU SYSTEM SETUP //
 // Create menu page object of class GEMPage. Menu page holds menu items (GEMItem) and represents menu level.
 // Menu can have multiple menu pages (linked to each other) with multiple menu items each
