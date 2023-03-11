@@ -689,15 +689,18 @@ void sequencerPlayNextNote(){
     if(lanes[i].state & STATE_MUTE){
       continue;
     }
-    // do the thing.
-    noteOn(midiChannel, lanes[i].instrument % 128, midiVelocity);
-    // TODO: Change when the noteoff is played?
-    noteOff(midiChannel, lanes[i].instrument % 128, 0);
+    int offset = lanes[i].bank * 16;
+    if(lanes[i].steps[sequencerStep+offset]){
+      // do the thing.
+      noteOn(midiChannel, lanes[i].instrument % 128, midiVelocity);
+      // TODO: Change when the noteoff is played?
+      noteOff(midiChannel, lanes[i].instrument % 128, 0);
+    }
   }
   
   // increment and confine to limit
   sequencerStep++;
-  sequencerStep%=32;
+  sequencerStep%=16;
 }
 
 // Return the first note that is currently held.
