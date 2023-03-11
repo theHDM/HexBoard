@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
+#include "LittleFS.h"
 #include <MIDI.h>
 #include <Adafruit_NeoPixel.h>
 #define GEM_DISABLE_GLCD
@@ -29,9 +30,10 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 #define LED_PIN 22
 #define LED_COUNT 140
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_RGB + NEO_KHZ800);
-int defaultBrightness = 50;
-int dimBrightness = 15;
-int pressedBrightness = 180;
+int stripBrightness = 110;
+int defaultBrightness = 70;
+int dimBrightness = 20;
+int pressedBrightness = 255;
 
 
 // ENCODER SETUP //
@@ -46,6 +48,7 @@ uint8_t encoder_state;
 
 // Create an instance of the U8g2 graphics library.
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
+int screenBrightness = stripBrightness / 2;
 
 //
 // Button matrix and LED locations
@@ -69,6 +72,7 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
 // 1 = Full button test (1 and 0)
 // 2 = Button test (button number)
 // 3 = MIDI output test
+// 4 = Loop timing readout in milliseconds
 int diagnostics = 0;
 
 // BUTTON MATRIX PINS //
@@ -158,29 +162,37 @@ const byte gerhardLayout[elementCount] = {
 const byte *currentLayout = wickiHaydenLayout;
 
 const unsigned int pitches[128] = {
-  16,17,18,19,21,22,23,25,26,28,29,31,                         // Octave 0
-  33,35,37,39,41,44,46,49,52,55,58,62,                         // Octave 1
-   65, 69, 73, 78, 82, 87, 93, 98,104,110,117,123,             // Octave 2
-  131,139,147,156,165,175,185,196,208,220,233,247,             // Octave 3
-  262,277,294,311,330,349,370,392,415,440,466,494,             // Octave 4
-  523,554,587,622,659,698,740,784,831,880,932,988,             // Octave 5
-  1047,1109,1175,1245,1319,1397,1480,1568,1661,1760,1865,1976, // Octave 6
-  2093,2217,2349,2489,2637,2794,2960,3136,3322,3520,3729,3951, // Octave 7
-  4186,4435,4699,4978,5274,5588,5920,6272,6645,7040,7459,7902, // Octave 8
-  8372,8870,9397,9956,10548,11175,11840,12544,13290,14080,14917,15804, //9
-  16744, // C10
-  17740, // C#10
-  18795, // D10
-  19912, // D#10
-  21096, // E10
-  22350, // F10
-  23680  // F#10
+  16, 17, 18, 19, 21, 22, 23, 25, 26, 28, 29, 31,                                  // Octave 0
+  33, 35, 37, 39, 41, 44, 46, 49, 52, 55, 58, 62,                                  // Octave 1
+  65, 69, 73, 78, 82, 87, 93, 98, 104, 110, 117, 123,                              // Octave 2
+  131, 139, 147, 156, 165, 175, 185, 196, 208, 220, 233, 247,                      // Octave 3
+  262, 277, 294, 311, 330, 349, 370, 392, 415, 440, 466, 494,                      // Octave 4
+  523, 554, 587, 622, 659, 698, 740, 784, 831, 880, 932, 988,                      // Octave 5
+  1047, 1109, 1175, 1245, 1319, 1397, 1480, 1568, 1661, 1760, 1865, 1976,          // Octave 6
+  2093, 2217, 2349, 2489, 2637, 2794, 2960, 3136, 3322, 3520, 3729, 3951,          // Octave 7
+  4186, 4435, 4699, 4978, 5274, 5588, 5920, 6272, 6645, 7040, 7459, 7902,          // Octave 8
+  8372, 8870, 9397, 9956, 10548, 11175, 11840, 12544, 13290, 14080, 14917, 15804,  //9
+  16744,                                                                           // C10
+  17740,                                                                           // C#10
+  18795,                                                                           // D10
+  19912,                                                                           // D#10
+  21096,                                                                           // E10
+  22350,                                                                           // F10
+  23680                                                                            // F#10
 };
 #define TONEPIN 23
 
 // Global time variables
-unsigned long currentTime;    // Program loop consistent variable for time in milliseconds since power on
-const byte debounceTime = 2;  // Global digital button debounce time in milliseconds
+unsigned long currentTime = 0;   // Program loop consistent variable for time in milliseconds since power on
+unsigned long previousTime = 0;  // Used to check speed of the loop in diagnostics mode 4
+int loopTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
+int screenTime = 0;              // Used to dim screen after a set time to prolong the lifespan of the OLED
+
+// Pitch bend variables
+int pitchBendNeutral = 0;   // The center position for the pitch bend "wheel." Could be adjusted for global tuning?
+int pitchBendTime = 0;      // Used to rate-limit pitch bend updates
+int pitchBendPosition = 0;  // The actual pitch bend variable used for sending MIDI
+int pitchBendSpeed = 2048;  // The ammount the pitch bend moves every time pitchBendTime hits it's limit.
 
 // Variables for holding digital button states and activation times
 byte activeButtons[elementCount];               // Array to hold current note button states
@@ -220,26 +232,33 @@ GEMSelect selectTranspose(sizeof(selectTransposeOptions) / sizeof(SelectOptionBy
 void validateTranspose();  // Forward declaration
 GEMItem menuItemTranspose("Transpose:", transpose, selectTranspose, validateTranspose);
 
-//bool highlightScale = true;  // whether the black keys should be dimmer  REMOVING THIS SOON
-//GEMItem menuItemHighlightScale("Scale Light:", highlightScale, setLayoutLEDs);
+void resetPitchBend();
+SelectOptionInt selectBendSpeedOptions[] = { { "SO SLOW", 256 }, { "Slow", 512 }, { "Medium", 1024 }, { "Fast", 2048 }, { "Cheetah", 4096 } };
+GEMSelect selectBendSpeed(sizeof(selectBendSpeedOptions) / sizeof(SelectOptionInt), selectBendSpeedOptions);
+GEMItem menuItemBendSpeed("Pitch Bend:", pitchBendSpeed, selectBendSpeed, resetPitchBend);
 
+void setBrightness();  //Forward declaration
+SelectOptionByte selectBrightnessOptions[] = { { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
+GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOptionByte), selectBrightnessOptions);
+GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
+
+bool buzzer = false;  // For enabling built-in buzzer for sound generation without a computer
+GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 
 // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
 byte menuItemHeight = 10;
 byte menuPageScreenTopOffset = 10;
-byte menuValuesLeftOffset = 86;
+byte menuValuesLeftOffset = 78;
 GEM_u8g2 menu(u8g2, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO, menuItemHeight, menuPageScreenTopOffset, menuValuesLeftOffset);
 
 
 // MIDI channel assignment
 byte midiChannel = 1;  // Current MIDI channel (changed via user input)
 
-
 // Velocity levels
 byte midiVelocity = 100;  // Default velocity
 
-bool buzzer = 0;
 // END SETUP SECTION
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -261,6 +280,15 @@ void setup() {
 
   Serial.begin(115200);  // Set serial to make uploads work without bootsel button
 
+  LittleFSConfig cfg;       // Configure file system defaults
+  cfg.setAutoFormat(true);  // Formats file system if it cannot be mounted.
+  LittleFS.setConfig(cfg);
+  LittleFS.begin();  // Mounts file system.
+  if (!LittleFS.begin()) {
+    Serial.println("An Error has occurred while mounting LittleFS");
+  }
+
+
   // Set pinModes for the digital button matrix.
   for (int pinNumber = 0; pinNumber < columnCount; pinNumber++)  // For each column pin...
   {
@@ -271,20 +299,22 @@ void setup() {
   pinMode(m4p, OUTPUT);
   pinMode(m8p, OUTPUT);
 
-  strip.begin();             // INITIALIZE NeoPixel strip object
-  strip.show();              // Turn OFF all pixels ASAP
-  strip.setBrightness(255);  // Set BRIGHTNESS (max = 255)
+  strip.begin();                         // INITIALIZE NeoPixel strip object
+  strip.show();                          // Turn OFF all pixels ASAP
+  strip.setBrightness(stripBrightness);  // Set BRIGHTNESS (max = 255)
   setCMD_LEDs();
-  strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, defaultBrightness));
+  strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, pressedBrightness));
   setLayoutLEDs();
 
   u8g2.begin();  //Menu and graphics setup
+  u8g2.setContrast(stripBrightness / 2);
+  menu.setSplashDelay(0);
   menu.init();
   setupMenu();
   menu.drawMenu();
 
   // wait until device mounted, maybe
-  for (int i=0; i<5 && !TinyUSBDevice.mounted();i++) delay(1);
+  for (int i = 0; i < 5 && !TinyUSBDevice.mounted(); i++) delay(1);
 
   // Print diagnostic troubleshooting information to serial monitor
   diagnosticTest();
@@ -299,14 +329,21 @@ void setup1() {  //Second core exclusively runs encoder
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 // START LOOP SECTION
 void loop() {
-  // Store the current time in a uniform variable for this program loop
-  currentTime = millis();
+
+  // Time tracking function
+  timeTracker();
+
+  // Reduces wear-and-tear on OLED panel
+  screenSaver();
 
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
 
   // Act on those buttons
   playNotes();
+
+  // Pitch bend stuff
+  pitchBend();
 
   // Held buttons
   heldButtons();
@@ -317,26 +354,12 @@ void loop() {
   // Read any new MIDI messages
   MIDI.read();
 
-  // Read menu functions
-  if (menu.readyForKey()) {
-    encoderState = digitalRead(encoderClick);
-    if (encoderState > encoderLastState) {
-      menu.registerKeyPress(GEM_KEY_OK);
-    }
-    encoderLastState = encoderState;
-    if (encoder_val < 0) {
-      menu.registerKeyPress(GEM_KEY_UP);
-      encoder_val = 0;
-    }
-    if (encoder_val > 0) {
-      menu.registerKeyPress(GEM_KEY_DOWN);
-      encoder_val = 0;
-    }
-  }
+  // Read menu navigation functions
+  menuNavigation();
 }
 
 void loop1() {
-  rotate();
+  rotate();  // Reads the encoder on the second core to avoid missed steps
   //readEncoder();
 }
 // END LOOP SECTION
@@ -345,6 +368,17 @@ void loop1() {
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 // START FUNCTIONS SECTION
+
+void timeTracker() {
+  loopTime = currentTime - previousTime;
+  if (diagnostics == 4) {  //Print out the time it takes to run each loop
+    Serial.println(loopTime);
+  }
+  // Update previouTime variable to give us a reference point for next loop
+  previousTime = currentTime;
+  // Store the current time in a uniform variable for this program loop
+  currentTime = millis();
+}
 
 void diagnosticTest() {
   if (diagnostics > 0) {
@@ -356,20 +390,17 @@ void commandPress(byte command) {
   if (command == CMDB_1) {
     midiVelocity = 100;
     setCMD_LEDs();
-    strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, defaultBrightness));
-    strip.setBrightness(255);  // Set BRIGHTNESS (max = 255)
+    strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, pressedBrightness));
   }
   if (command == CMDB_2) {
     midiVelocity = 60;
     setCMD_LEDs();
-    strip.setPixelColor(cmdBtn2, strip.ColorHSV(65536 / 3, 255, defaultBrightness));
-    strip.setBrightness(127);  // Set BRIGHTNESS (max = 255)
+    strip.setPixelColor(cmdBtn2, strip.ColorHSV(65536 / 3, 255, pressedBrightness));
   }
   if (command == CMDB_3) {
     midiVelocity = 20;
     setCMD_LEDs();
-    strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, defaultBrightness));
-    strip.setBrightness(63);  // Set BRIGHTNESS (max = 255)
+    strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, pressedBrightness));
   }
   if (command == CMDB_4) {
   }
@@ -378,11 +409,119 @@ void commandPress(byte command) {
   if (command == CMDB_6) {
   }
   if (command == CMDB_7) {
-    buzzer = !buzzer;
-    strip.setPixelColor(cmdBtn7, strip.ColorHSV(65536 / 2, 255, 2*defaultBrightness*buzzer));
   }
 }
 void commandRelease(byte command) {
+}
+
+void pitchBend() {  //todo: possibly add a check where if no notes are active, make the pitch bend instant. Add LED updates.
+
+  if (activeButtons[89] && !activeButtons[109] && !activeButtons[129]) {  // Whole pitch up
+    pitchBendTime = pitchBendTime + loopTime;
+    if (pitchBendTime >= 20) {
+      pitchBendTime = 0;
+      if (pitchBendPosition < 8192) {
+        pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+        if (pitchBendPosition > 8191) {  // This is a hack to prevent going over the maximum number (8191) that MIDI pitchbend can go without messing up my math.
+          MIDI.sendPitchBend(8191, midiChannel);
+        }
+        if (pitchBendPosition <= 8191) {
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+      }
+    }
+  }
+  if (activeButtons[89] && activeButtons[109] && !activeButtons[129]) {  // Half pitch up
+    pitchBendTime = pitchBendTime + loopTime;
+    if (pitchBendTime >= 20) {
+      pitchBendTime = 0;
+      if (pitchBendPosition > 4096) {
+        pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+      }
+      if (pitchBendPosition < 4096) {
+        pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+      }
+    }
+  }
+  if (!activeButtons[89] && activeButtons[109] && activeButtons[129]) {  // Half pitch down
+    pitchBendTime = pitchBendTime + loopTime;
+    if (pitchBendTime >= 20) {
+      pitchBendTime = 0;
+      if (pitchBendPosition > -4096) {
+        pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+      }
+      if (pitchBendPosition < -4096) {
+        pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+      }
+    }
+  }
+  if (!activeButtons[89] && !activeButtons[109] && activeButtons[129]) {  // Whole pitch down
+    pitchBendTime = pitchBendTime + loopTime;
+    if (pitchBendTime >= 20) {
+      pitchBendTime = 0;
+      if (pitchBendPosition > -8192) {
+        pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+      }
+    }
+  }
+  if (!activeButtons[89] && !activeButtons[129]) {  // Neutral pitch
+    if (pitchBendTime != 200) {
+      pitchBendTime = pitchBendTime + loopTime;
+      if (pitchBendTime >= 20) {
+        pitchBendTime = 0;
+        if (pitchBendPosition > 0) {
+          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+        if (pitchBendPosition < 0) {
+          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+      }
+      if (pitchBendPosition == 0) {
+        pitchBendTime = 200;
+      }
+    }
+  }
+  if (activeButtons[89] && activeButtons[109] && activeButtons[129]) {  // Neutral pitch case two where all buttons are pressed - kinda hacky
+    if (pitchBendTime != 200) {
+      pitchBendTime = pitchBendTime + loopTime;
+      if (pitchBendTime >= 20) {
+        pitchBendTime = 0;
+        if (pitchBendPosition > 0) {
+          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+        if (pitchBendPosition < 0) {
+          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+      }
+      if (pitchBendPosition == 0) {
+        pitchBendTime = 200;
+      }
+    }
+  }
+  if (pitchBendPosition > 0) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, ((pitchBendPosition / 32) - 1)));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, (-pitchBendPosition / 32)));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(0, 255, 0));
+  }
+  if (pitchBendPosition == 0) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, 255));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(0, 255, 0));
+  }
+  if (pitchBendPosition < 0) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, (pitchBendPosition / 32)));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(0, 255, ((-pitchBendPosition / 32) - 1)));
+  }
 }
 
 // BUTTONS //
@@ -415,7 +554,6 @@ void readDigitalButtons() {
           // newpress time
           activeButtonsTime[buttonNumber] = millis();
         }
-        // TODO: Implement debounce?
         activeButtons[buttonNumber] = 1;
       } else {
         // Otherwise, the button is inactive, write a 0.
@@ -488,17 +626,18 @@ void noteOn(byte channel, byte pitch, byte velocity) {
     Serial.println(channel);
   }
   if (buzzer) {
-      tone(TONEPIN, pitches[pitch], 1000);
+    tone(TONEPIN, pitches[pitch]);
   }
 }
 // Send Note Off
 void noteOff(byte channel, byte pitch, byte velocity) {
   MIDI.sendNoteOff(pitch, velocity, channel);
   noTone(TONEPIN);
-  if(buzzer) {
+  if (buzzer) {
     byte anotherPitch = getHeldNote();
     if (anotherPitch < 128) {
-      tone(TONEPIN, pitches[anotherPitch], 1000);
+      tone(TONEPIN, pitches[anotherPitch]);
+    } else {
     }
   }
 }
@@ -509,9 +648,6 @@ void setCMD_LEDs() {
   strip.setPixelColor(cmdBtn2, strip.ColorHSV(65536 / 3, 255, dimBrightness));
   strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, dimBrightness));
   strip.setPixelColor(cmdBtn4, strip.ColorHSV(0, 255, defaultBrightness));
-  strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, defaultBrightness));
-  strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, defaultBrightness));
-  strip.setPixelColor(cmdBtn7, strip.ColorHSV(0, 255, defaultBrightness));
 }
 
 void setLayoutLEDs() {
@@ -608,13 +744,36 @@ void encoder_init() {
 }
 
 // MENU //
+void menuNavigation() {
+  if (menu.readyForKey()) {
+    encoderState = digitalRead(encoderClick);
+    if (encoderState > encoderLastState) {
+      menu.registerKeyPress(GEM_KEY_OK);
+      screenTime = 0;
+    }
+    encoderLastState = encoderState;
+    if (encoder_val < 0) {
+      menu.registerKeyPress(GEM_KEY_UP);
+      encoder_val = 0;
+      screenTime = 0;
+    }
+    if (encoder_val > 0) {
+      menu.registerKeyPress(GEM_KEY_DOWN);
+      encoder_val = 0;
+      screenTime = 0;
+    }
+  }
+}
+
 void setupMenu() {
   // Add menu items to Main menu page
   menuPageMain.addMenuItem(menuItemLayout);
   menuPageMain.addMenuItem(menuItemKey);
   menuPageMain.addMenuItem(menuItemScale);
-  //menuPageMain.addMenuItem(menuItemHighlightScale); REMOVING SOON
   menuPageMain.addMenuItem(menuItemTranspose);
+  menuPageMain.addMenuItem(menuItemBendSpeed);
+  menuPageMain.addMenuItem(menuItemBrightness);
+  menuPageMain.addMenuItem(menuItemBuzzer);
   // Add menu items to Layout Select page
   menuPageLayout.addMenuItem(menuItemWickiHayden);
   menuPageLayout.addMenuItem(menuItemHarmonicTable);
@@ -629,22 +788,29 @@ void setupMenu() {
 void wickiHayden() {
   currentLayout = wickiHaydenLayout;
   setLayoutLEDs();
+  //u8g2.setDisplayRotation(U8G2_R2); IMPLEMENT ROTATION WITH NEXT HARDWARE REVISION USING 128*128 SCREEN
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
 void harmonicTable() {
   currentLayout = harmonicTableLayout;
   setLayoutLEDs();
+  //u8g2.setDisplayRotation(U8G2_R1);
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
 void gerhard() {
   currentLayout = gerhardLayout;
   setLayoutLEDs();
+  //u8g2.setDisplayRotation(U8G2_R1);
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
 
+void setBrightness() {
+  strip.setBrightness(stripBrightness);
+  setLayoutLEDs();
+}
 
 // Validation routine of transpose variable
 void validateTranspose() {
@@ -654,6 +820,27 @@ void validateTranspose() {
     transpose = 0;
   } */
   setLayoutLEDs();
+}
+
+//Resets pitch bend to zero to avoid glitches when changing speed mid-bend
+void resetPitchBend() {
+  pitchBendPosition = pitchBendNeutral;
+  MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+}
+
+void screenSaver() {
+  if (screenTime <= 10000) {
+    screenTime = screenTime + loopTime;
+    if (screenBrightness != stripBrightness / 2) {
+      screenBrightness = stripBrightness / 2;
+      u8g2.setContrast(screenBrightness);
+    }
+  }
+  if (screenTime > 10000)
+    if (screenBrightness != 1) {
+      screenBrightness = 1;
+      u8g2.setContrast(screenBrightness);
+    }
 }
 
 // END FUNCTIONS SECTION
