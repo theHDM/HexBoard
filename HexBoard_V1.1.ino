@@ -205,7 +205,8 @@ typedef struct {
   bool bank = 0;
   int state = 0;// TODO: change to enum: normal, mute, solo, mute&solo
 } Lane;
-Lane lanes[7];
+#define NLANES 7
+Lane lanes[NLANES];
 
 bool sequencerMode=1;
 
@@ -629,7 +630,7 @@ void sequencerToggleThingies() {
       if (activeButtons[i]){
         int stripN = i / 20;
         int step = map2step(i % 20);
-        if (step >= 0){
+        if (step >= 0 && stripN < NLANES){
           int offset = lanes[stripN].bank*16;
           lanes[stripN].steps[step+offset] = !lanes[stripN].steps[step+offset];
           int color = 0;
