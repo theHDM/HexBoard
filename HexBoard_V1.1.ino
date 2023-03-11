@@ -207,6 +207,8 @@ typedef struct {
 } Lane;
 Lane lanes[7];
 
+bool sequencerMode=1;
+
 // MENU SYSTEM SETUP //
 // Create menu page object of class GEMPage. Menu page holds menu items (GEMItem) and represents menu level.
 // Menu can have multiple menu pages (linked to each other) with multiple menu items each
@@ -347,14 +349,22 @@ void loop() {
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
 
-  // Act on those buttons
-  playNotes();
+  if(sequencerMode){
+    // Cause newpresses to change stuff
+    sequencerToggleThingies();
 
-  // Pitch bend stuff
-  pitchBend();
+    // If it's time to play notes, play them
+    sequencerMaybePlayNotes();
+  }else{
+    // Act on those buttons
+    playNotes();
 
-  // Held buttons
-  heldButtons();
+    // Pitch bend stuff
+    pitchBend();
+
+    // Held buttons
+    heldButtons();
+  }
 
   // Do the LEDS
   strip.show();
@@ -608,6 +618,42 @@ void heldButtons() {
       //if (
     }
   }
+}
+
+void sequencerToggleThingies() {
+  // For all buttons in the deck
+  for (int i = 0; i < elementCount; i++) {
+    // Some change was made
+    if (activeButtons[i] != previousActiveButtons[i]){
+      // newpress
+      if (activeButtons[i]){
+        int stripN = i / 20;
+        int step = map2step(i % 20);
+        if (step >= 0){
+          int offset = lanes[stripN].bank*16;
+          lanes[stripN].steps[step+offset] = !lanes[stripN].steps[step+offset];
+          int color = 0;
+          if(lanes[stripN].steps[step+offset])color = 255;
+          strip.setPixelColor(i, color, color, color);
+
+        }
+      }
+    }
+  }
+}
+// TODO: Redefine this for hexboard v2
+int map2step(int i){
+  if(i >= 10){
+    return (19-i)*2;
+  }
+  if (i<=8) {
+    return ((8-i)*2)+1;
+  }
+  return -1;
+}
+
+void sequencerMaybePlayNotes(){
+  
 }
 
 // Return the first note that is currently held.
