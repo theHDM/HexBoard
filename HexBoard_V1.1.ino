@@ -204,9 +204,15 @@ typedef struct {
   bool steps[32] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
   bool bank = 0;
   int state = 0;// TODO: change to enum: normal, mute, solo, mute&solo
+  int instrument = 0;
 } Lane;
+#define STATE_MUTE 1
+#define STATE_SOLO 2
+
 #define NLANES 7
 Lane lanes[NLANES];
+
+int sequencerStep = 0; // 0 - 31
 
 bool sequencerMode=1;
 
@@ -274,6 +280,13 @@ byte midiVelocity = 100;  // Default velocity
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 void setup() {
+lanes[0].instrument = 36; // Bass Drum 1
+lanes[1].instrument = 40; // Electric Snare
+lanes[2].instrument = 46; // Open Hi-Hat
+lanes[3].instrument = 42; // Closed Hi-Hat
+lanes[4].instrument = 49; // Crash Cymbal 1
+lanes[5].instrument = 45; // Low Tom
+lanes[6].instrument = 50; // Hi Tom
 
 #if defined(ARDUINO_ARCH_MBED) && defined(ARDUINO_ARCH_RP2040)
   // Manual begin() is required on core without built-in support for TinyUSB such as mbed rp2040
@@ -654,7 +667,37 @@ int map2step(int i){
 }
 
 void sequencerMaybePlayNotes(){
+  // TODO: sometimes call sequencerPlayNextNote();
+}
+
+// Do the next note, and increment the sequencer counter
+void sequencerPlayNextNote(){
+  bool anySolo = false;
+  for(int i = 0; i<NLANES; i++){
+    // bitwise check if it's soloed
+    if(lanes[i].state & STATE_SOLO){
+      anySolo = true;
+    }
+  }
+
+  for(int i = 0; i<NLANES; i++){
+    // If something is soloed (not this one), then don't do the thing
+    if(anySolo && !(lanes[i].state & STATE_SOLO)){
+      continue;
+    }
+    // If this one was muted, don't do the thing.
+    if(lanes[i].state & STATE_MUTE){
+      continue;
+    }
+    // do the thing.
+    noteOn(midiChannel, lanes[i].instrument % 128, midiVelocity);
+    // TODO: Change when the noteoff is played?
+    noteOff(midiChannel, lanes[i].instrument % 128, 0);
+  }
   
+  // increment and confine to limit
+  sequencerStep++;
+  sequencerStep%=32;
 }
 
 // Return the first note that is currently held.
