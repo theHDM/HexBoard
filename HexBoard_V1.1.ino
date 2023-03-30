@@ -47,6 +47,7 @@ int8_t encoder_val = 0;
 uint8_t encoder_state;
 
 // Create an instance of the U8g2 graphics library.
+//U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
 int screenBrightness = stripBrightness / 2;
 
@@ -77,6 +78,7 @@ int diagnostics = 0;
 
 // BUTTON MATRIX PINS //
 const byte columns[] = { 14, 15, 13, 12, 11, 10, 9, 8, 7, 6 };  // Column pins in order from right to left
+//const byte columns[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }; // New board revision
 const int m1p = 4;                                              // Multiplexing chip control pins
 const int m2p = 5;
 const int m4p = 2;
@@ -255,7 +257,7 @@ GEMSelect selectBendSpeed(sizeof(selectBendSpeedOptions) / sizeof(SelectOptionIn
 GEMItem menuItemBendSpeed("Pitch Bend:", pitchBendSpeed, selectBendSpeed, resetPitchBend);
 
 void setBrightness();  //Forward declaration
-SelectOptionByte selectBrightnessOptions[] = { { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
+SelectOptionByte selectBrightnessOptions[] = { { "Night", 10}, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
 GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOptionByte), selectBrightnessOptions);
 GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
 
