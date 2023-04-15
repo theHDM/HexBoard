@@ -216,7 +216,20 @@ Lane lanes[NLANES];
 
 int sequencerStep = 0; // 0 - 31
 
-bool sequencerMode=1;
+// You have to push a button to switch modes
+bool sequencerMode=0;
+
+void handleNoteOn(byte channel, byte pitch, byte velocity)
+{
+  // Rosegarden sends its metronome this way. Using for testing...
+  if(1 == sequencerMode && 10 == channel && 37 == pitch) {
+    if(velocity == 120) {
+      // Round to nearest bar (so we have 2 bars)
+      sequencerStep = ((sequencerStep+1)/16)*15;
+    }
+    sequencerPlayNextNote();
+  }
+}
 
 // MENU SYSTEM SETUP //
 // Create menu page object of class GEMPage. Menu page holds menu items (GEMItem) and represents menu level.
@@ -282,19 +295,21 @@ byte midiVelocity = 100;  // Default velocity
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 void setup() {
-lanes[0].instrument = 36; // Bass Drum 1
-lanes[1].instrument = 40; // Electric Snare
-lanes[2].instrument = 46; // Open Hi-Hat
-lanes[3].instrument = 42; // Closed Hi-Hat
-lanes[4].instrument = 49; // Crash Cymbal 1
-lanes[5].instrument = 45; // Low Tom
-lanes[6].instrument = 50; // Hi Tom
+  lanes[0].instrument = 36; // Bass Drum 1
+  lanes[1].instrument = 40; // Electric Snare
+  lanes[2].instrument = 46; // Open Hi-Hat
+  lanes[3].instrument = 42; // Closed Hi-Hat
+  lanes[4].instrument = 49; // Crash Cymbal 1
+  lanes[5].instrument = 45; // Low Tom
+  lanes[6].instrument = 50; // Hi Tom
 
 #if defined(ARDUINO_ARCH_MBED) && defined(ARDUINO_ARCH_RP2040)
   // Manual begin() is required on core without built-in support for TinyUSB such as mbed rp2040
   TinyUSB_Device_Init(0);
 #endif
   usb_midi.setStringDescriptor("HexBoard MIDI");
+  // Callback will be run by MIDI.read()
+  MIDI.setHandleNoteOn(handleNoteOn);
   // Initialize MIDI, and listen to all MIDI channels
   // This will also call usb_midi's begin()
   MIDI.begin(MIDI_CHANNEL_OMNI);
@@ -437,6 +452,8 @@ void commandPress(byte command) {
     strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, pressedBrightness));
   }
   if (command == CMDB_4) {
+    // Zach's feature to switch modes.
+    sequencerMode = !sequencerMode;
   }
   if (command == CMDB_5) {
   }
@@ -644,20 +661,28 @@ void sequencerToggleThingies() {
       // newpress
       if (activeButtons[i]){
         int stripN = i / 20;
+        if (stripN >= NLANES) continue; // avoid an error.
         int step = map2step(i % 20);
-        if (step >= 0 && stripN < NLANES){
+        if (step >= 0){
           int offset = lanes[stripN].bank*16;
           lanes[stripN].steps[step+offset] = !lanes[stripN].steps[step+offset];
           int color = 0;
           if(lanes[stripN].steps[step+offset])color = 255;
           strip.setPixelColor(i, color, color, color);
-
+        } else if(step == -1) { // switching banks
+          lanes[stripN].bank = !lanes[stripN].bank;
+          int offset = lanes[stripN].bank*16;
+          for (int j=0; j < 16; j++){
+            int color = 0;
+            if(lanes[stripN].steps[j+offset])color = 255;
+            strip.setPixelColor((stripN*20)+step2map(j), color, color, color);
+          }
         }
       }
     }
   }
 }
-// TODO: Redefine this for hexboard v2
+// TODO: Redefine these for hexboard v2
 int map2step(int i){
   if(i >= 10){
     return (19-i)*2;
@@ -665,7 +690,14 @@ int map2step(int i){
   if (i<=8) {
     return ((8-i)*2)+1;
   }
+  if (i==9) return -1; // command button
   return -1;
+}
+int step2map(int step){
+  if (step%2){
+    return 8-((step-1)/2);
+  }
+  return 19-(step/2);
 }
 
 void sequencerMaybePlayNotes(){
