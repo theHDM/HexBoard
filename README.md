@@ -26,7 +26,32 @@ we'll assume you're already proficient at installing software on your computer a
 
 #### Using [arduino-cli](https://arduino.github.io/arduino-cli/latest/)
 
-(Instructions to come)
+(You also need to have `python3` installed on your system)
+
+```sh
+# Download the board index
+arduino-cli --additional-urls=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json core update-index
+# Install the core for rp2040
+arduino-cli --additional-urls=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json core download rp2040:rp2040
+arduino-cli --additional-urls=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json core install rp2040:rp2040
+# Install libraries
+arduino-cli lib install "MIDI library"
+arduino-cli lib install "Adafruit NeoPixel"
+arduino-cli lib install "U8g2" # dependency for GEM
+arduino-cli lib install "Adafruit GFX Library" # dependency for GEM
+arduino-cli lib install "GEM"
+sed -i 's@#include "config/enable-glcd.h"@//\0@g' ../libraries/GEM/src/config.h # remove dependency from GEM
+# Correct Rotary Library
+git clone https://github.com/buxtronix/arduino buxduino
+cd buxduino
+git apply ../Rotary.patch
+cd ..
+mv buxduino/libraries/Rotary ../libraries/
+rm -rf buxduino
+# Run Make to build the firmware
+make
+```
+Your firmware file will be the uf2 file inside the build directory.
 
 ### Flashing the firmware
 

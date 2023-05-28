@@ -1,0 +1,21 @@
+diff --git a/libraries/Rotary/Rotary.cpp b/libraries/Rotary/Rotary.cpp
+index 298925d..9d3a02a 100644
+--- a/libraries/Rotary/Rotary.cpp
++++ b/libraries/Rotary/Rotary.cpp
+@@ -127,13 +127,9 @@ Rotary::Rotary(char _pin1, char _pin2) {
+   // Assign variables.
+   pin1 = _pin1;
+   pin2 = _pin2;
+-  // Set pins to input.
+-  pinMode(pin1, INPUT);
+-  pinMode(pin2, INPUT);
+-#ifdef ENABLE_PULLUPS
+-  digitalWrite(pin1, HIGH);
+-  digitalWrite(pin2, HIGH);
+-#endif
++  // Set pins to input pullup.
++  pinMode(pin1, INPUT_PULLUP);
++  pinMode(pin2, INPUT_PULLUP);
+   // Initialise state.
+   state = R_START;
+ }
