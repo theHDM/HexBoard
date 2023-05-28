@@ -20,6 +20,11 @@
 #include <Wire.h>
 #include <Rotary.h>
 
+// Change before compile depending on target hardware
+// 1 = HexBoard 1.0 (dev unit)
+// 2 = HexBoard 1.1 (first retail unit)
+#define ModelNumber 2
+
 // USB MIDI object //
 Adafruit_USBD_MIDI usb_midi;
 // Create a new instance of the Arduino MIDI Library,
@@ -29,11 +34,19 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
 // LED SETUP //
 #define LED_PIN 22
 #define LED_COUNT 140
+#if ModelNumber == 1
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_RGB + NEO_KHZ800);
 int stripBrightness = 110;
 int defaultBrightness = 70;
 int dimBrightness = 20;
 int pressedBrightness = 255;
+#elif ModelNumber == 2
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+int stripBrightness = 110;
+int defaultBrightness = 160;
+int dimBrightness = 40;
+int pressedBrightness = 255;
+#endif
 
 
 // ENCODER SETUP //
@@ -47,8 +60,11 @@ int8_t encoder_val = 0;
 uint8_t encoder_state;
 
 // Create an instance of the U8g2 graphics library.
-//U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
+#if ModelNumber == 1
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
+#elif ModelNumber == 2
+U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
+#endif
 int screenBrightness = stripBrightness / 2;
 
 //
@@ -77,9 +93,12 @@ int screenBrightness = stripBrightness / 2;
 int diagnostics = 0;
 
 // BUTTON MATRIX PINS //
+#if ModelNumber == 1
 const byte columns[] = { 14, 15, 13, 12, 11, 10, 9, 8, 7, 6 };  // Column pins in order from right to left
-//const byte columns[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }; // New board revision
-const int m1p = 4;                                              // Multiplexing chip control pins
+#elif ModelNumber == 2
+const byte columns[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };  // New board revision
+#endif
+const int m1p = 4;  // Multiplexing chip control pins
 const int m2p = 5;
 const int m4p = 2;
 const int m8p = 3;
@@ -100,6 +119,7 @@ const int CMDB_7 = 134;
 const int UNUSED = 255;
 
 // LED addresses for CMD buttons.
+#if ModelNumber == 1
 const byte cmdBtn1 = 10 - 1;
 const byte cmdBtn2 = 30 - 1;
 const byte cmdBtn3 = 50 - 1;
@@ -107,10 +127,24 @@ const byte cmdBtn4 = 70 - 1;
 const byte cmdBtn5 = 90 - 1;
 const byte cmdBtn6 = 110 - 1;
 const byte cmdBtn7 = 130 - 1;
+#else
+const byte cmdBtn1 = 0;
+const byte cmdBtn2 = 20;
+const byte cmdBtn3 = 40;
+const byte cmdBtn4 = 60;
+const byte cmdBtn5 = 80;
+const byte cmdBtn6 = 100;
+const byte cmdBtn7 = 120;
+#endif
 
 // MIDI NOTE LAYOUTS //
+#if ModelNumber == 1
 #define ROW_FLIP(x, ix, viii, vii, vi, v, iv, iii, ii, i) i, ii, iii, iv, v, vi, vii, viii, ix, x
 //hacky macro because I (Jared) messed up the board layout - I'll do better next time! xD
+#else
+#define ROW_FLIP(i, ii, iii, iv, v, vi, vii, viii, ix, x) i, ii, iii, iv, v, vi, vii, viii, ix, x
+//fixed it the second time around!
+#endif
 
 // MIDI note layout tables
 const byte wickiHaydenLayout[elementCount] = {
@@ -467,7 +501,7 @@ void commandRelease(byte command) {
 
 void pitchBend() {  //todo: possibly add a check where if no notes are active, make the pitch bend instant. Add LED updates.
 
-  if (activeButtons[89] && !activeButtons[109] && !activeButtons[129]) {  // Whole pitch up
+  if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {  // Whole pitch up
     pitchBendTime = pitchBendTime + loopTime;
     if (pitchBendTime >= 20) {
       pitchBendTime = 0;
@@ -482,7 +516,7 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
-  if (activeButtons[89] && activeButtons[109] && !activeButtons[129]) {  // Half pitch up
+  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {  // Half pitch up
     pitchBendTime = pitchBendTime + loopTime;
     if (pitchBendTime >= 20) {
       pitchBendTime = 0;
@@ -496,7 +530,7 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
-  if (!activeButtons[89] && activeButtons[109] && activeButtons[129]) {  // Half pitch down
+  if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Half pitch down
     pitchBendTime = pitchBendTime + loopTime;
     if (pitchBendTime >= 20) {
       pitchBendTime = 0;
@@ -510,7 +544,7 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
-  if (!activeButtons[89] && !activeButtons[109] && activeButtons[129]) {  // Whole pitch down
+  if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Whole pitch down
     pitchBendTime = pitchBendTime + loopTime;
     if (pitchBendTime >= 20) {
       pitchBendTime = 0;
@@ -520,7 +554,7 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
-  if (!activeButtons[89] && !activeButtons[129]) {  // Neutral pitch
+  if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn7]) {  // Neutral pitch
     if (pitchBendTime != 200) {
       pitchBendTime = pitchBendTime + loopTime;
       if (pitchBendTime >= 20) {
@@ -539,7 +573,7 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
-  if (activeButtons[89] && activeButtons[109] && activeButtons[129]) {  // Neutral pitch case two where all buttons are pressed - kinda hacky
+  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn7]) {  // Neutral pitch case two where top and bottom are pressed at the same time - hacky
     if (pitchBendTime != 200) {
       pitchBendTime = pitchBendTime + loopTime;
       if (pitchBendTime >= 20) {
@@ -558,6 +592,26 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
       }
     }
   }
+  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Neutral pitch case three where all buttons are pressed - kinda hacky
+    if (pitchBendTime != 200) {
+      pitchBendTime = pitchBendTime + loopTime;
+      if (pitchBendTime >= 20) {
+        pitchBendTime = 0;
+        if (pitchBendPosition > 0) {
+          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+        if (pitchBendPosition < 0) {
+          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
+          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
+        }
+      }
+      if (pitchBendPosition == 0) {
+        pitchBendTime = 200;
+      }
+    }
+  }
+
   if (pitchBendPosition > 0) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, ((pitchBendPosition / 32) - 1)));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, (-pitchBendPosition / 32)));
@@ -923,21 +977,27 @@ void setupMenu() {
 void wickiHayden() {
   currentLayout = wickiHaydenLayout;
   setLayoutLEDs();
-  //u8g2.setDisplayRotation(U8G2_R2); IMPLEMENT ROTATION WITH NEXT HARDWARE REVISION USING 128*128 SCREEN
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R2);
+  }
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
 void harmonicTable() {
   currentLayout = harmonicTableLayout;
   setLayoutLEDs();
-  //u8g2.setDisplayRotation(U8G2_R1);
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
 void gerhard() {
   currentLayout = gerhardLayout;
   setLayoutLEDs();
-  //u8g2.setDisplayRotation(U8G2_R1);
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
 }
