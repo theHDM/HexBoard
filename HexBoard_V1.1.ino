@@ -237,9 +237,9 @@ unsigned long activeButtonsTime[elementCount];  // Array to track last note butt
 
 // Variables for sequencer mode
 typedef struct {
-  bool steps[32] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  bool steps[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   bool bank = 0;
-  int state = 0;// TODO: change to enum: normal, mute, solo, mute&solo
+  int state = 0;  // TODO: change to enum: normal, mute, solo, mute&solo
   int instrument = 0;
 } Lane;
 #define STATE_MUTE 1
@@ -248,19 +248,26 @@ typedef struct {
 #define NLANES 7
 Lane lanes[NLANES];
 
-int sequencerStep = 0; // 0 - 31
+int sequencerStep = 0;  // 0 - 31
 
 // You have to push a button to switch modes
-bool sequencerMode=0;
+bool sequencerMode = 0;
 
-void handleNoteOn(byte channel, byte pitch, byte velocity)
-{
+/*
+THESE CAN BE USED TO RESET THE SEQUENCE POSITION
+void handleStart(void);
+void handleContinue(void);
+void handleStop(void);
+
+THIS WILL BE USED FOR THE SEQUENCER CLOCK (24 frames per quarter note)
+void handleTimeCodeQuarterFrame(byte data);
+We should be able to adjust the division in the menu to have different sequence speeds.
+
+*/
+
+void handleNoteOn(byte channel, byte pitch, byte velocity) {
   // Rosegarden sends its metronome this way. Using for testing...
-  if(1 == sequencerMode && 10 == channel && 37 == pitch) {
-    if(velocity == 120) {
-      // Round to nearest bar (so we have 2 bars)
-      sequencerStep = ((sequencerStep+1)/16)*15;
-    }
+  if (1 == sequencerMode && 10 == channel && 100 == pitch) {
     sequencerPlayNextNote();
   }
 }
@@ -270,6 +277,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
 // Menu can have multiple menu pages (linked to each other) with multiple menu items each
 GEMPage menuPageMain("HexBoard MIDI Controller");
 GEMPage menuPageLayout("Layout");
+GEMPage menuPageTesting("Unfinished Alpha Tests");
 
 GEMItem menuItemLayout("Layout", menuPageLayout);
 void wickiHayden();  //Forward declarations
@@ -304,13 +312,18 @@ GEMSelect selectBendSpeed(sizeof(selectBendSpeedOptions) / sizeof(SelectOptionIn
 GEMItem menuItemBendSpeed("Pitch Bend:", pitchBendSpeed, selectBendSpeed, resetPitchBend);
 
 void setBrightness();  //Forward declaration
-SelectOptionByte selectBrightnessOptions[] = { { "Night", 10}, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
+SelectOptionByte selectBrightnessOptions[] = { { "Night", 10 }, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
 GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOptionByte), selectBrightnessOptions);
 GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
 
 bool buzzer = false;  // For enabling built-in buzzer for sound generation without a computer
 GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
+// For use when testing out unfinished features
+GEMItem menuItemTesting("Testing", menuPageTesting);
+void sequencerSetup();  //Forward declaration
+// For enabling basic sequencer mode - not complete
+GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
 
 // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
 byte menuItemHeight = 10;
@@ -329,24 +342,25 @@ byte midiVelocity = 100;  // Default velocity
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 void setup() {
-  lanes[0].instrument = 36; // Bass Drum 1
-  lanes[1].instrument = 40; // Electric Snare
-  lanes[2].instrument = 46; // Open Hi-Hat
-  lanes[3].instrument = 42; // Closed Hi-Hat
-  lanes[4].instrument = 49; // Crash Cymbal 1
-  lanes[5].instrument = 45; // Low Tom
-  lanes[6].instrument = 50; // Hi Tom
+  lanes[0].instrument = 36;  // Bass Drum 1
+  lanes[1].instrument = 40;  // Electric Snare
+  lanes[2].instrument = 46;  // Open Hi-Hat
+  lanes[3].instrument = 42;  // Closed Hi-Hat
+  lanes[4].instrument = 49;  // Crash Cymbal 1
+  lanes[5].instrument = 45;  // Low Tom
+  lanes[6].instrument = 50;  // Hi Tom
 
 #if defined(ARDUINO_ARCH_MBED) && defined(ARDUINO_ARCH_RP2040)
   // Manual begin() is required on core without built-in support for TinyUSB such as mbed rp2040
   TinyUSB_Device_Init(0);
 #endif
   usb_midi.setStringDescriptor("HexBoard MIDI");
-  // Callback will be run by MIDI.read()
-  MIDI.setHandleNoteOn(handleNoteOn);
   // Initialize MIDI, and listen to all MIDI channels
   // This will also call usb_midi's begin()
   MIDI.begin(MIDI_CHANNEL_OMNI);
+  // Callback will be run by MIDI.read()
+  MIDI.setHandleNoteOn(handleNoteOn);
+  //MIDI.setHandleTimeCodeQuarterFrame(handleTimeCodeQuarterFrame);
 
   Wire.setSDA(16);
   Wire.setSCL(17);
@@ -414,13 +428,13 @@ void loop() {
   // Read and store the digital button states of the scanning matrix
   readDigitalButtons();
 
-  if(sequencerMode){
+  if (sequencerMode) {
     // Cause newpresses to change stuff
     sequencerToggleThingies();
 
     // If it's time to play notes, play them
     sequencerMaybePlayNotes();
-  }else{
+  } else {
     // Act on those buttons
     playNotes();
 
@@ -486,8 +500,6 @@ void commandPress(byte command) {
     strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, pressedBrightness));
   }
   if (command == CMDB_4) {
-    // Zach's feature to switch modes.
-    sequencerMode = !sequencerMode;
   }
   if (command == CMDB_5) {
   }
@@ -711,25 +723,25 @@ void sequencerToggleThingies() {
   // For all buttons in the deck
   for (int i = 0; i < elementCount; i++) {
     // Some change was made
-    if (activeButtons[i] != previousActiveButtons[i]){
+    if (activeButtons[i] != previousActiveButtons[i]) {
       // newpress
-      if (activeButtons[i]){
+      if (activeButtons[i]) {
         int stripN = i / 20;
-        if (stripN >= NLANES) continue; // avoid an error.
+        if (stripN >= NLANES) continue;  // avoid an error.
         int step = map2step(i % 20);
-        if (step >= 0){
-          int offset = lanes[stripN].bank*16;
-          lanes[stripN].steps[step+offset] = !lanes[stripN].steps[step+offset];
+        if (step >= 0) {
+          int offset = lanes[stripN].bank * 16;
+          lanes[stripN].steps[step + offset] = !lanes[stripN].steps[step + offset];
           int color = 0;
-          if(lanes[stripN].steps[step+offset])color = 255;
+          if (lanes[stripN].steps[step + offset]) color = 255;
           strip.setPixelColor(i, color, color, color);
-        } else if(step == -1) { // switching banks
+        } else if (step == -1) {  // switching banks
           lanes[stripN].bank = !lanes[stripN].bank;
-          int offset = lanes[stripN].bank*16;
-          for (int j=0; j < 16; j++){
+          int offset = lanes[stripN].bank * 16;
+          for (int j = 0; j < 16; j++) {
             int color = 0;
-            if(lanes[stripN].steps[j+offset])color = 255;
-            strip.setPixelColor((stripN*20)+step2map(j), color, color, color);
+            if (lanes[stripN].steps[j + offset]) color = 255;
+            strip.setPixelColor((stripN * 20) + step2map(j), color, color, color);
           }
         }
       }
@@ -737,58 +749,57 @@ void sequencerToggleThingies() {
   }
 }
 // TODO: Redefine these for hexboard v2
-int map2step(int i){
-  if(i >= 10){
-    return (19-i)*2;
+int map2step(int i) {
+  if (i >= 10) {
+    return (19 - i) * 2;
   }
-  if (i<=8) {
-    return ((8-i)*2)+1;
+  if (i <= 8) {
+    return ((8 - i) * 2) + 1;
   }
-  if (i==9) return -1; // command button
   return -1;
 }
-int step2map(int step){
-  if (step%2){
-    return 8-((step-1)/2);
+int step2map(int step) {
+  if (step % 2) {
+    return 8 - ((step - 1) / 2);
   }
-  return 19-(step/2);
+  return 19 - (step / 2);
 }
 
-void sequencerMaybePlayNotes(){
+void sequencerMaybePlayNotes() {
   // TODO: sometimes call sequencerPlayNextNote();
 }
 
 // Do the next note, and increment the sequencer counter
-void sequencerPlayNextNote(){
+void sequencerPlayNextNote() {
   bool anySolo = false;
-  for(int i = 0; i<NLANES; i++){
+  for (int i = 0; i < NLANES; i++) {
     // bitwise check if it's soloed
-    if(lanes[i].state & STATE_SOLO){
+    if (lanes[i].state & STATE_SOLO) {
       anySolo = true;
     }
   }
 
-  for(int i = 0; i<NLANES; i++){
+  for (int i = 0; i < NLANES; i++) {
     // If something is soloed (not this one), then don't do the thing
-    if(anySolo && !(lanes[i].state & STATE_SOLO)){
+    if (anySolo && !(lanes[i].state & STATE_SOLO)) {
       continue;
     }
     // If this one was muted, don't do the thing.
-    if(lanes[i].state & STATE_MUTE){
+    if (lanes[i].state & STATE_MUTE) {
       continue;
     }
     int offset = lanes[i].bank * 16;
-    if(lanes[i].steps[sequencerStep+offset]){
+    if (lanes[i].steps[sequencerStep + offset]) {
       // do the thing.
       noteOn(midiChannel, lanes[i].instrument % 128, midiVelocity);
       // TODO: Change when the noteoff is played?
       noteOff(midiChannel, lanes[i].instrument % 128, 0);
     }
   }
-  
+
   // increment and confine to limit
   sequencerStep++;
-  sequencerStep%=16;
+  sequencerStep %= 16;
 }
 
 // Return the first note that is currently held.
@@ -963,13 +974,16 @@ void setupMenu() {
   menuPageMain.addMenuItem(menuItemBendSpeed);
   menuPageMain.addMenuItem(menuItemBrightness);
   menuPageMain.addMenuItem(menuItemBuzzer);
+  menuPageMain.addMenuItem(menuItemTesting);
   // Add menu items to Layout Select page
   menuPageLayout.addMenuItem(menuItemWickiHayden);
   menuPageLayout.addMenuItem(menuItemHarmonicTable);
   menuPageLayout.addMenuItem(menuItemGerhard);
-  // Specify parent menu page for the Settings menu page
+  // Add menu items to Testing page
+  menuPageTesting.addMenuItem(menuItemSequencer);
+  // Specify parent menu page for the other menu pages
   menuPageLayout.setParentMenuPage(menuPageMain);
-
+  menuPageTesting.setParentMenuPage(menuPageMain);
   // Add menu page to menu and set it as current
   menu.setMenuPageCurrent(menuPageMain);
 }
@@ -1036,6 +1050,15 @@ void screenSaver() {
       screenBrightness = 1;
       u8g2.setContrast(screenBrightness);
     }
+}
+void sequencerSetup() {
+  if (sequencerMode) {
+    strip.clear();
+    strip.show();
+  } else {
+    setLayoutLEDs();
+    setCMD_LEDs();
+  }
 }
 
 // END FUNCTIONS SECTION
