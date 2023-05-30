@@ -1,0 +1,13 @@
+diff --git a/HexBoard_V1.1.ino b/HexBoard_V1.1.ino
+index e63c00c..d257751 100644
+--- a/HexBoard_V1.1.ino
++++ b/HexBoard_V1.1.ino
+@@ -25,7 +25,7 @@
+ // Change before compile depending on target hardware
+ // 1 = HexBoard 1.0 (dev unit)
+ // 2 = HexBoard 1.1 (first retail unit)
+-#define ModelNumber 2
++#define ModelNumber 1
+ 
+ // USB MIDI object //
+ Adafruit_USBD_MIDI usb_midi;

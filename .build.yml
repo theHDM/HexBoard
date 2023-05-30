@@ -1,0 +1,31 @@
+image: archlinux
+packages:
+  - arduino-cli
+  - python3
+  - make
+  - git
+sources:
+  - https://git.sr.ht/~earboxer/HexBoard
+  - https://github.com/buxtronix/arduino
+tasks:
+  - libraries: |
+      mv arduino buxduino
+      arduino-cli --additional-urls=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json core update-index
+      # Install the core for rp2040
+      arduino-cli --additional-urls=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json core install rp2040:rp2040
+      arduino-cli lib install "MIDI library" "Adafruit NeoPixel" "U8g2" "Adafruit GFX Library" "GEM"
+      sed -i 's@#include "config/enable-glcd.h"@//\0@g' ~/Arduino/libraries/GEM/src/config.h # remove dependency from GEM
+      cd buxduino
+      git apply ../HexBoard/Rotary.patch
+      cd ..
+      mv buxduino/libraries/Rotary ~/Arduino/libraries/
+  - build: |
+      cd HexBoard
+      make
+      mv build/build.ino.uf2 build/model2.ino.uf2
+      git apply model1.patch
+      make
+      mv build/build.ino.uf2 build/model1.ino.uf2
+artifacts:
+  - HexBoard/build/model1.ino.uf2
+  - HexBoard/build/model2.ino.uf2

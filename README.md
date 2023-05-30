@@ -40,13 +40,13 @@ arduino-cli lib install "Adafruit NeoPixel"
 arduino-cli lib install "U8g2" # dependency for GEM
 arduino-cli lib install "Adafruit GFX Library" # dependency for GEM
 arduino-cli lib install "GEM"
-sed -i 's@#include "config/enable-glcd.h"@//\0@g' ../libraries/GEM/src/config.h # remove dependency from GEM
+sed -i 's@#include "config/enable-glcd.h"@//\0@g' ~/Arduino/libraries/GEM/src/config.h # remove dependency from GEM
 # Correct Rotary Library
 git clone https://github.com/buxtronix/arduino buxduino
 cd buxduino
 git apply ../Rotary.patch
 cd ..
-mv buxduino/libraries/Rotary ../libraries/
+mv buxduino/libraries/Rotary ~/Arduino/libraries/
 rm -rf buxduino
 # Run Make to build the firmware
 make
