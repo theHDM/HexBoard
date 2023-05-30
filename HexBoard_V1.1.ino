@@ -1,3 +1,5 @@
+// Copyright 2022-2023 Jared DeCook and Zach DeCook
+// Licenced under the GNU GPL Version 3.
 // Hardware Information:
 // Generic RP2040 running at 133MHz with 16MB of flash
 // https://github.com/earlephilhower/arduino-pico
