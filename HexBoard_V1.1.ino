@@ -323,6 +323,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
+boolean release = true; // Whether this is a release or not
+GEMItem menuItemVersion("V0.1.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -983,6 +985,7 @@ void setupMenu() {
   menuPageLayout.addMenuItem(menuItemGerhard);
   // Add menu items to Testing page
   menuPageTesting.addMenuItem(menuItemSequencer);
+  menuPageTesting.addMenuItem(menuItemVersion);
   // Specify parent menu page for the other menu pages
   menuPageLayout.setParentMenuPage(menuPageMain);
   menuPageTesting.setParentMenuPage(menuPageMain);

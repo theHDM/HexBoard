@@ -15,6 +15,8 @@ or [contact Jared](mailto:jared@shapingthesilence.com) if you're interested in a
 
 The Arduino firmware is the default firmware for the HexBoard (and is what this repository contains).
 
+[![Sourcehut Build status](https://builds.sr.ht/~earboxer/HexBoard/commits/.svg)](https://builds.sr.ht/~earboxer/HexBoard/commits/?) Nightly builds are automatically made when a commit is pushed to SourceHut.
+
 ### Building the firmware
 
 If you want to build the firmware,
