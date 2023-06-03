@@ -226,11 +226,13 @@ unsigned long previousTime = 0;  // Used to check speed of the loop in diagnosti
 int loopTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
 int screenTime = 0;              // Used to dim screen after a set time to prolong the lifespan of the OLED
 
-// Pitch bend variables
+// Pitch bend and mod wheel variables
 int pitchBendNeutral = 0;   // The center position for the pitch bend "wheel." Could be adjusted for global tuning?
-int pitchBendTime = 0;      // Used to rate-limit pitch bend updates
 int pitchBendPosition = 0;  // The actual pitch bend variable used for sending MIDI
-int pitchBendSpeed = 2048;  // The ammount the pitch bend moves every time pitchBendTime hits it's limit.
+int pitchBendSpeed = 2048;  // The amount the pitch bend moves every time modPitchTime hits it's limit.
+int modPitchTime = 0;       // Used to rate-limit pitch bend and mod wheel updates
+byte modWheelPosition = 0;  // Actual mod wheel variable used for sending MIDI
+byte modWheelSpeed = 4;      // The amount the mod wheel moves every time modPitchTime hits it's limit.
 
 // Variables for holding digital button states and activation times
 byte activeButtons[elementCount];               // Array to hold current note button states
@@ -323,8 +325,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = true; // Whether this is a release or not
-GEMItem menuItemVersion("V0.1.0 ", release, GEM_READONLY);
+boolean release = false;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.1.1 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -442,8 +444,13 @@ void loop() {
     // Act on those buttons
     playNotes();
 
-    // Pitch bend stuff
-    pitchBend();
+    if (true) {
+      // Pitch bend stuff
+      pitchBend();
+    } else {
+      // mod wheel stuff
+      modWheel();
+    }
 
     // Held buttons
     heldButtons();
@@ -515,119 +522,44 @@ void commandPress(byte command) {
 void commandRelease(byte command) {
 }
 
-void pitchBend() {  //todo: possibly add a check where if no notes are active, make the pitch bend instant. Add LED updates.
+void pitchBend() {  //todo: possibly add a check where if no notes are active, make the pitch bend instant.
 
-  if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {  // Whole pitch up
-    pitchBendTime = pitchBendTime + loopTime;
-    if (pitchBendTime >= 20) {
-      pitchBendTime = 0;
-      if (pitchBendPosition < 8192) {
-        pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-        if (pitchBendPosition > 8191) {  // This is a hack to prevent going over the maximum number (8191) that MIDI pitchbend can go without messing up my math.
-          MIDI.sendPitchBend(8191, midiChannel);
-        }
-        if (pitchBendPosition <= 8191) {
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-      }
-    }
+  // Default: no pitch change
+  int pitchBendTarget = 0;
+  if        (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    pitchBendTarget = 8191; // Whole pitch up
+  } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    pitchBendTarget = 4096; // Half pitch up
+  } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
+    pitchBendTarget = -4096; // Half pitch down
+  } else if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
+    pitchBendTarget = -8192; // Whole pitch down
   }
-  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {  // Half pitch up
-    pitchBendTime = pitchBendTime + loopTime;
-    if (pitchBendTime >= 20) {
-      pitchBendTime = 0;
-      if (pitchBendPosition > 4096) {
+
+  // Approach the target, sendPitchBend based on timing
+  if (pitchBendPosition != pitchBendTarget) {
+    modPitchTime = modPitchTime + loopTime;
+    if (modPitchTime >= 20) {
+      // if distance between current value and target is less than the mod speed,
+      if (abs(pitchBendPosition - pitchBendTarget) < pitchBendSpeed) {
+        // don't go past the target.
+        pitchBendPosition = pitchBendTarget;
+      } else if (pitchBendPosition > pitchBendTarget) {
+        // otherwise, subtract (or add) the speed to approach the target.
         pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-      }
-      if (pitchBendPosition < 4096) {
+      } else if (pitchBendPosition < pitchBendTarget) {
         pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
       }
-    }
-  }
-  if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Half pitch down
-    pitchBendTime = pitchBendTime + loopTime;
-    if (pitchBendTime >= 20) {
-      pitchBendTime = 0;
-      if (pitchBendPosition > -4096) {
-        pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-      }
-      if (pitchBendPosition < -4096) {
-        pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-      }
-    }
-  }
-  if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Whole pitch down
-    pitchBendTime = pitchBendTime + loopTime;
-    if (pitchBendTime >= 20) {
-      pitchBendTime = 0;
-      if (pitchBendPosition > -8192) {
-        pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-        MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-      }
-    }
-  }
-  if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn7]) {  // Neutral pitch
-    if (pitchBendTime != 200) {
-      pitchBendTime = pitchBendTime + loopTime;
-      if (pitchBendTime >= 20) {
-        pitchBendTime = 0;
-        if (pitchBendPosition > 0) {
-          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-        if (pitchBendPosition < 0) {
-          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-      }
-      if (pitchBendPosition == 0) {
-        pitchBendTime = 200;
-      }
-    }
-  }
-  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn7]) {  // Neutral pitch case two where top and bottom are pressed at the same time - hacky
-    if (pitchBendTime != 200) {
-      pitchBendTime = pitchBendTime + loopTime;
-      if (pitchBendTime >= 20) {
-        pitchBendTime = 0;
-        if (pitchBendPosition > 0) {
-          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-        if (pitchBendPosition < 0) {
-          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-      }
-      if (pitchBendPosition == 0) {
-        pitchBendTime = 200;
-      }
-    }
-  }
-  if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {  // Neutral pitch case three where all buttons are pressed - kinda hacky
-    if (pitchBendTime != 200) {
-      pitchBendTime = pitchBendTime + loopTime;
-      if (pitchBendTime >= 20) {
-        pitchBendTime = 0;
-        if (pitchBendPosition > 0) {
-          pitchBendPosition = pitchBendPosition - pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-        if (pitchBendPosition < 0) {
-          pitchBendPosition = pitchBendPosition + pitchBendSpeed;
-          MIDI.sendPitchBend(pitchBendPosition, midiChannel);
-        }
-      }
-      if (pitchBendPosition == 0) {
-        pitchBendTime = 200;
-      }
+      // Always send the pitchBend because pitchBendPosition changed.
+      MIDI.sendPitchBend(pitchBendPosition, midiChannel);
     }
   }
 
+  if (pitchBendPosition == 0) {
+    modPitchTime = 200;  // Resets clock when pitchBend returns to 0 for instant responsiveness upon button press
+  }
+
+  // Set the lights
   if (pitchBendPosition > 0) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, ((pitchBendPosition / 32) - 1)));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, (-pitchBendPosition / 32)));
@@ -642,6 +574,79 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, 0));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(0, 255, (pitchBendPosition / 32)));
     strip.setPixelColor(cmdBtn7, strip.ColorHSV(0, 255, ((-pitchBendPosition / 32) - 1)));
+  }
+}
+
+void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the mess
+  //BIG IDEA! Set target based on what keys are being pressed. Then use that target as a variable instead of the static numbers hard coded per target.
+  byte modWheelTarget = 0;
+  if        (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    modWheelTarget = 127;
+  } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    modWheelTarget = 100;
+  } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    modWheelTarget = 75;
+  } else if (activeButtons[cmdBtn5] &&                            activeButtons[cmdBtn7]) {
+    modWheelTarget = 75;
+  } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
+    modWheelTarget = 50;
+  } else if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
+    modWheelTarget = 25;
+  } else if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    modWheelTarget = 0;
+  }
+
+  if (modWheelPosition != modWheelTarget) { // Only runs the clock when mod target differs from actual
+    modPitchTime = modPitchTime + loopTime;
+    if (modPitchTime >= 20) {
+      modPitchTime = 0;
+      // if distance between current value and target is less than the mod speed,
+      if (abs(modWheelPosition - modWheelTarget) < modWheelSpeed) {
+        // don't go past the target.
+        modWheelPosition = modWheelTarget;
+      } else if (modWheelPosition > modWheelTarget) {
+        // otherwise, subtract (or add) the speed to approach the target.
+        modWheelPosition = modWheelPosition - modWheelSpeed;
+      } else if (modWheelPosition < modWheelTarget) {
+        modWheelPosition = modWheelPosition + modWheelSpeed;
+      }
+      // Always send the control change because modWheelPosition changed.
+      MIDI.sendControlChange(1, modWheelPosition, midiChannel);
+    }
+  }
+  if (modWheelPosition == 0) {
+    modPitchTime = 200;  // Resets clock when modwheel returns to 0 for instant responsiveness upon button press
+  }
+
+  // Set the pixel colors based on the (new) modWheelPosition.
+  if (modWheelPosition == 0) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+  } else if (modWheelPosition > 0 && modWheelPosition < 25) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, (modWheelPosition * 10)));
+  } else if (modWheelPosition == 25) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 255));
+  } else if (modWheelPosition > 25 && modWheelPosition < 75) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, ((modWheelPosition - 25) * 5)));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 25) * 5)));
+  } else if (modWheelPosition == 75) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 255));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+  } else if (modWheelPosition > 75 && modWheelPosition < 127) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, ((modWheelPosition - 25) * 5)));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 25) * 5)));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+  } else if (modWheelPosition == 127) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 255));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
   }
 }
 
