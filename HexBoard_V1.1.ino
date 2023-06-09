@@ -229,10 +229,11 @@ int screenTime = 0;              // Used to dim screen after a set time to prolo
 // Pitch bend and mod wheel variables
 int pitchBendNeutral = 0;   // The center position for the pitch bend "wheel." Could be adjusted for global tuning?
 int pitchBendPosition = 0;  // The actual pitch bend variable used for sending MIDI
-int pitchBendSpeed = 2048;  // The amount the pitch bend moves every time modPitchTime hits it's limit.
+int pitchBendSpeed = 1024;  // The amount the pitch bend moves every time modPitchTime hits it's limit.
 int modPitchTime = 0;       // Used to rate-limit pitch bend and mod wheel updates
 byte modWheelPosition = 0;  // Actual mod wheel variable used for sending MIDI
-byte modWheelSpeed = 4;      // The amount the mod wheel moves every time modPitchTime hits it's limit.
+byte modWheelSpeed = 6;     // The amount the mod wheel moves every time modPitchTime hits it's limit.
+bool pitchModToggle = 1;    // Used to toggle between pitch bend and mod wheel
 
 // Variables for holding digital button states and activation times
 byte activeButtons[elementCount];               // Array to hold current note button states
@@ -310,10 +311,13 @@ GEMSelect selectTranspose(sizeof(selectTransposeOptions) / sizeof(SelectOptionBy
 void validateTranspose();  // Forward declaration
 GEMItem menuItemTranspose("Transpose:", transpose, selectTranspose, validateTranspose);
 
-void resetPitchBend();
-SelectOptionInt selectBendSpeedOptions[] = { { "SO SLOW", 256 }, { "Slow", 512 }, { "Medium", 1024 }, { "Fast", 2048 }, { "Cheetah", 4096 } };
+SelectOptionInt selectBendSpeedOptions[] = { { "too slo", 128 }, { "Turtle", 256 }, { "Slow", 512 }, { "Medium", 1024 }, { "Fast", 2048 }, { "Cheetah", 4096 }, { "Instant", 16384 } };
 GEMSelect selectBendSpeed(sizeof(selectBendSpeedOptions) / sizeof(SelectOptionInt), selectBendSpeedOptions);
-GEMItem menuItemBendSpeed("Pitch Bend:", pitchBendSpeed, selectBendSpeed, resetPitchBend);
+GEMItem menuItemBendSpeed("Pitch Bend:", pitchBendSpeed, selectBendSpeed);
+
+SelectOptionByte selectModSpeedOptions[] = { { "too slo", 1 }, { "Turtle", 2 }, { "Slow", 3 }, { "Medium", 6 }, { "Fast", 12 }, { "Cheetah", 32 }, { "Instant", 127 } };
+GEMSelect selectModSpeed(sizeof(selectModSpeedOptions) / sizeof(SelectOptionByte), selectModSpeedOptions);
+GEMItem menuItemModSpeed("Mod Wheel:", modWheelSpeed, selectModSpeed);
 
 void setBrightness();  //Forward declaration
 SelectOptionByte selectBrightnessOptions[] = { { "Night", 10 }, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
@@ -325,8 +329,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = false;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.1.1 ", release, GEM_READONLY);
+boolean release = true;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.2.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -444,7 +448,7 @@ void loop() {
     // Act on those buttons
     playNotes();
 
-    if (true) {
+    if (pitchModToggle) {
       // Pitch bend stuff
       pitchBend();
     } else {
@@ -511,6 +515,7 @@ void commandPress(byte command) {
     strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, pressedBrightness));
   }
   if (command == CMDB_4) {
+    pitchModToggle = !pitchModToggle;  // Toggles between pitch bend and mod wheel
   }
   if (command == CMDB_5) {
   }
@@ -526,20 +531,21 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
 
   // Default: no pitch change
   int pitchBendTarget = 0;
-  if        (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
-    pitchBendTarget = 8191; // Whole pitch up
+  if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+    pitchBendTarget = 8191;  // Whole pitch up
   } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
-    pitchBendTarget = 4096; // Half pitch up
+    pitchBendTarget = 4096;  // Half pitch up
   } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
-    pitchBendTarget = -4096; // Half pitch down
+    pitchBendTarget = -4096;  // Half pitch down
   } else if (!activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
-    pitchBendTarget = -8192; // Whole pitch down
+    pitchBendTarget = -8192;  // Whole pitch down
   }
 
   // Approach the target, sendPitchBend based on timing
   if (pitchBendPosition != pitchBendTarget) {
     modPitchTime = modPitchTime + loopTime;
-    if (modPitchTime >= 20) {
+    if (modPitchTime >= 20) {  // Only run this loop every 20 ms to avoid overrunning MIDI
+      modPitchTime = 0;        // Reset clock.
       // if distance between current value and target is less than the mod speed,
       if (abs(pitchBendPosition - pitchBendTarget) < pitchBendSpeed) {
         // don't go past the target.
@@ -555,10 +561,11 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
     }
   }
 
-  if (pitchBendPosition == 0) {
-    modPitchTime = 200;  // Resets clock when pitchBend returns to 0 for instant responsiveness upon button press
+  if (pitchBendPosition == pitchBendTarget && modPitchTime != 200) {  // When the pitchbend hits the target...
+    modPitchTime = 200;                                               // ...reset the clock for instant responsiveness upon button change
   }
-
+  // Set mode indicator button red if in pitch bend mode
+  strip.setPixelColor(cmdBtn4, strip.ColorHSV(0, 255, defaultBrightness));
   // Set the lights
   if (pitchBendPosition > 0) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(0, 255, ((pitchBendPosition / 32) - 1)));
@@ -580,13 +587,13 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
 void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the mess
   //BIG IDEA! Set target based on what keys are being pressed. Then use that target as a variable instead of the static numbers hard coded per target.
   byte modWheelTarget = 0;
-  if        (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
+  if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
     modWheelTarget = 127;
   } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
     modWheelTarget = 100;
   } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
     modWheelTarget = 75;
-  } else if (activeButtons[cmdBtn5] &&                            activeButtons[cmdBtn7]) {
+  } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn7]) {
     modWheelTarget = 75;
   } else if (!activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && activeButtons[cmdBtn7]) {
     modWheelTarget = 50;
@@ -596,10 +603,10 @@ void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the m
     modWheelTarget = 0;
   }
 
-  if (modWheelPosition != modWheelTarget) { // Only runs the clock when mod target differs from actual
+  if (modWheelPosition != modWheelTarget) {  // Only runs the clock when mod target differs from actual
     modPitchTime = modPitchTime + loopTime;
-    if (modPitchTime >= 20) {
-      modPitchTime = 0;
+    if (modPitchTime >= 20) {  // If it has been over 20 ms from last run,
+      modPitchTime = 0;        // reset clock.
       // if distance between current value and target is less than the mod speed,
       if (abs(modWheelPosition - modWheelTarget) < modWheelSpeed) {
         // don't go past the target.
@@ -614,10 +621,11 @@ void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the m
       MIDI.sendControlChange(1, modWheelPosition, midiChannel);
     }
   }
-  if (modWheelPosition == 0) {
-    modPitchTime = 200;  // Resets clock when modwheel returns to 0 for instant responsiveness upon button press
+  if (modWheelPosition == modWheelTarget && modPitchTime != 200) {
+    modPitchTime = 200;  // Resets clock when modwheel hits target for instant responsiveness upon button change
   }
-
+  // Set mode indicator button green if in mod wheel mode
+  strip.setPixelColor(cmdBtn4, strip.ColorHSV(21854, 255, defaultBrightness));
   // Set the pixel colors based on the (new) modWheelPosition.
   if (modWheelPosition == 0) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
@@ -639,11 +647,11 @@ void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the m
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 255));
     strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
-  } else if (modWheelPosition > 75 && modWheelPosition < 127) {
-    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, ((modWheelPosition - 25) * 5)));
-    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 25) * 5)));
+  } else if (modWheelPosition > 75 && modWheelPosition < 125) {
+    strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, ((modWheelPosition - 75) * 5)));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 75) * 5)));
     strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
-  } else if (modWheelPosition == 127) {
+  } else if (modWheelPosition >= 125) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 255));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
     strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
@@ -981,6 +989,7 @@ void setupMenu() {
   menuPageMain.addMenuItem(menuItemScale);
   menuPageMain.addMenuItem(menuItemTranspose);
   menuPageMain.addMenuItem(menuItemBendSpeed);
+  menuPageMain.addMenuItem(menuItemModSpeed);
   menuPageMain.addMenuItem(menuItemBrightness);
   menuPageMain.addMenuItem(menuItemBuzzer);
   menuPageMain.addMenuItem(menuItemTesting);
@@ -1039,12 +1048,6 @@ void validateTranspose() {
     transpose = 0;
   } */
   setLayoutLEDs();
-}
-
-//Resets pitch bend to zero to avoid glitches when changing speed mid-bend
-void resetPitchBend() {
-  pitchBendPosition = pitchBendNeutral;
-  MIDI.sendPitchBend(pitchBendPosition, midiChannel);
 }
 
 void screenSaver() {
