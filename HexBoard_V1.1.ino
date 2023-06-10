@@ -329,8 +329,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = true;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.2.0 ", release, GEM_READONLY);
+boolean release = false;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.2.1 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -642,19 +642,19 @@ void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the m
   } else if (modWheelPosition > 25 && modWheelPosition < 75) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, ((modWheelPosition - 25) * 5)));
-    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 25) * 5)));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 255));
   } else if (modWheelPosition == 75) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 0));
     strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 255));
-    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 255));
   } else if (modWheelPosition > 75 && modWheelPosition < 125) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, ((modWheelPosition - 75) * 5)));
-    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, (255 - (modWheelPosition - 75) * 5)));
-    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 255));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 255));
   } else if (modWheelPosition >= 125) {
     strip.setPixelColor(cmdBtn5, strip.ColorHSV(21854, 255, 255));
-    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 0));
-    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 0));
+    strip.setPixelColor(cmdBtn6, strip.ColorHSV(21854, 255, 255));
+    strip.setPixelColor(cmdBtn7, strip.ColorHSV(21854, 255, 255));
   }
 }
 
