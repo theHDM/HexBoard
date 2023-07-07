@@ -197,7 +197,7 @@ const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_7, 44, 43, 42, 41, 40, 39, 38, 37, 36),
   ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
 };
-const byte *currentLayout = wickiHaydenLayout;
+const byte* currentLayout = wickiHaydenLayout;
 
 const unsigned int pitches[128] = {
   16, 17, 18, 19, 21, 22, 23, 25, 26, 28, 29, 31,                                  // Octave 0
@@ -299,9 +299,56 @@ GEMSelect selectKey(sizeof(selectKeyOptions) / sizeof(SelectOptionByte), selectK
 GEMItem menuItemKey("Key:", key, selectKey, setLayoutLEDs);
 
 byte scale = 0;
-SelectOptionByte selectScaleOptions[] = { { "NONE", 0 }, { "Major", 1 }, { "HarMin", 2 }, { "MelMin", 3 }, { "NatMin", 4 }, { "NONE", 5 }, { "NONE", 6 }, { "NONE", 7 }, { "NONE", 8 }, { "NONE", 9 }, { "NONE", 10 }, { "NONE", 11 } };
+SelectOptionByte selectScaleOptions[] = { { "ALL", 0 }, { "Major", 1 }, { "HarMin", 2 }, { "MelMin", 3 }, { "NatMin", 4 }, { "PentMaj", 5 }, { "PentMin", 6 }, { "Blues", 7 }, { "NONE", 8 }, { "NONE", 9 }, { "NONE", 10 }, { "NONE", 11 } };
 GEMSelect selectScale(sizeof(selectScaleOptions) / sizeof(SelectOptionByte), selectScaleOptions);
-GEMItem menuItemScale("Scale:", scale, selectScale, setLayoutLEDs);
+GEMItem menuItemScale("Scale:", scale, selectScale, applySelectedScale);
+
+std::array<byte, 12> selectedScale;
+// Scale arrays
+const std::array<byte, 12> chromaticScale = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
+const std::array<byte, 12> majorScale = { 0, 2, 4, 5, 7, 9, 11, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> harmonicMinorScale = { 0, 2, 3, 5, 7, 8, 11, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> melodicMinorScale = { 0, 2, 3, 5, 7, 9, 11, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> naturalMinorScale = { 0, 2, 3, 5, 7, 8, 10, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> pentatonicMajorScale = { 0, 2, 4, 7, 9, 0, 0, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> pentatonicMinorScale = { 0, 3, 5, 7, 10, 0, 0, 0, 0, 0, 0, 0 };
+const std::array<byte, 12> bluesScale = { 0, 3, 5, 6, 7, 10, 0, 0, 0, 0, 0, 0 };
+
+// Function to apply the selected scale
+void applySelectedScale() {
+  switch (scale) {
+    case 0:  // All notes
+      selectedScale = chromaticScale;
+      break;
+    case 1:  // Major scale
+      selectedScale = majorScale;
+      break;
+    case 2:  // Harmonic minor scale
+      selectedScale = harmonicMinorScale;
+      break;
+    case 3:  // Melodic minor scale
+      selectedScale = melodicMinorScale;
+      break;
+    case 4:  // Natural minor scale
+      selectedScale = naturalMinorScale;
+      break;
+    case 5:  // Pentatonic major scale
+      selectedScale = pentatonicMajorScale;
+      break;
+    case 6:  // Pentatonic minor scale
+      selectedScale = pentatonicMinorScale;
+      break;
+    case 7:  // Blues scale
+      selectedScale = bluesScale;
+      break;
+    default:
+      break;
+  }
+  setLayoutLEDs();
+}
+
+bool scaleLock = false;  // For enabling built-in buzzer for sound generation without a computer
+GEMItem menuItemScaleLock("Scale Lock:", scaleLock, setLayoutLEDs);
 
 int transpose = 0;
 SelectOptionInt selectTransposeOptions[] = {
@@ -403,6 +450,7 @@ void setup() {
   strip.setBrightness(stripBrightness);  // Set BRIGHTNESS (max = 255)
   setCMD_LEDs();
   strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, pressedBrightness));
+  selectedScale = chromaticScale;  // Set default scale
   setLayoutLEDs();
 
   u8g2.begin();  //Menu and graphics setup
@@ -702,6 +750,28 @@ void readDigitalButtons() {
   }
 }
 
+// Function to check if a note is within the selected scale
+bool isNotePlayable(byte note) {
+  if (!scaleLock) {
+    return true;  // Return true unconditionally if the toggle is disabled
+  }
+  for (int k = 0; k < 12; k++) {
+    if (note == selectedScale[k]) {
+      return true;
+    }
+  }
+  return false;
+}
+// Used by things not affected by scaleLock
+bool isNoteLit(byte note) {
+  for (int k = 0; k < 12; k++) {
+    if (note == selectedScale[k]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void playNotes() {
   for (int i = 0; i < elementCount; i++)  // For all buttons in the deck
   {
@@ -710,16 +780,22 @@ void playNotes() {
       if (activeButtons[i] == 1)  // If the button is active (newpress)
       {
         if (currentLayout[i] < 128) {
-          strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
-          noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
+          byte note = (currentLayout[i] - key + transpose) % 12;
+          if (isNotePlayable(note)) {  // If note is within the selected scale, light up and play
+            strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
+            noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
+          }
         } else {
           commandPress(currentLayout[i]);
         }
       } else {
         // If the button is inactive (released)
         if (currentLayout[i] < 128) {
-          setLayoutLED(i);
-          noteOff(midiChannel, (currentLayout[i] + transpose) % 128, 0);
+          byte note = (currentLayout[i] - key + transpose) % 12;
+          if (isNotePlayable(note)) {
+            setLayoutLED(i);
+            noteOff(midiChannel, (currentLayout[i] + transpose) % 128, 0);
+          }
         } else {
           commandRelease(currentLayout[i]);
         }
@@ -875,60 +951,16 @@ void setLayoutLEDs() {
   }
 }
 void setLayoutLED(int i) {
-  strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, defaultBrightness));
+  int note = (currentLayout[i] - key + transpose) % 12;
+  if (scaleLock) {
+    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, 0));
+  } else {
+    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, dimBrightness));
+  }
+
   // Scale highlighting
-  if (scale == 0) {  //NONE
-    switch ((currentLayout[i] - key + transpose) % 12) {
-      default: break;  // No changes since there is no scale selected
-    }
-  }
-  if (scale == 1) {  //Major
-    switch ((currentLayout[i] - key + transpose) % 12) {
-      // If it is one of the dark keys, fall through to case 10.
-      case 1:
-      case 3:
-      case 6:
-      case 8:
-      case 10: strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, dimBrightness)); break;
-      // Otherwise it was a highlighted key. Do nothing
-      default: break;
-    }
-  }
-  if (scale == 2) {  //HarMin
-    switch ((currentLayout[i] - key + transpose) % 12) {
-      // If it is one of the dark keys, fall through to case 10.
-      case 1:
-      case 4:
-      case 6:
-      case 9:
-      case 10: strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, dimBrightness)); break;
-      // Otherwise it was a highlighted key. Do nothing
-      default: break;
-    }
-  }
-  if (scale == 3) {  //MelMin
-    switch ((currentLayout[i] - key + transpose) % 12) {
-      // If it is one of the dark keys, fall through to case 10.
-      case 1:
-      case 4:
-      case 6:
-      case 8:
-      case 10: strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, dimBrightness)); break;
-      // Otherwise it was a highlighted key. Do nothing
-      default: break;
-    }
-  }
-  if (scale == 4) {  //NatMin
-    switch ((currentLayout[i] - key + transpose) % 12) {
-      // If it is one of the dark keys, fall through to case 10.
-      case 1:
-      case 4:
-      case 6:
-      case 9:
-      case 11: strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, dimBrightness)); break;
-      // Otherwise it was a highlighted key. Do nothing
-      default: break;
-    }
+  if (isNoteLit(note)) {
+    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, defaultBrightness));
   }
 }
 
@@ -987,6 +1019,7 @@ void setupMenu() {
   menuPageMain.addMenuItem(menuItemLayout);
   menuPageMain.addMenuItem(menuItemKey);
   menuPageMain.addMenuItem(menuItemScale);
+  menuPageMain.addMenuItem(menuItemScaleLock);
   menuPageMain.addMenuItem(menuItemTranspose);
   menuPageMain.addMenuItem(menuItemBendSpeed);
   menuPageMain.addMenuItem(menuItemModSpeed);
