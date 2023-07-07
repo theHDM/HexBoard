@@ -45,7 +45,7 @@ int pressedBrightness = 255;
 #elif ModelNumber == 2
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 int stripBrightness = 110;
-int defaultBrightness = 160;
+int defaultBrightness = 140;
 int dimBrightness = 40;
 int pressedBrightness = 255;
 #endif
