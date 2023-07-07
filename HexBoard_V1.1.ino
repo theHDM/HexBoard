@@ -453,7 +453,8 @@ void setup() {
   selectedScale = chromaticScale;  // Set default scale
   setLayoutLEDs();
 
-  u8g2.begin();  //Menu and graphics setup
+  u8g2.begin();               //Menu and graphics setup
+  u8g2.setBusClock(1000000);  // Speed up display
   u8g2.setContrast(stripBrightness / 2);
   menu.setSplashDelay(0);
   menu.init();
