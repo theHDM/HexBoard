@@ -26,6 +26,8 @@ tasks:
       git apply model1.patch
       make
       mv build/build.ino.uf2 build/model1.ino.uf2
+      sha256sum build/model1.ino.uf2
+      sha256sum build/model2.ino.uf2
 artifacts:
   - HexBoard/build/model1.ino.uf2
   - HexBoard/build/model2.ino.uf2

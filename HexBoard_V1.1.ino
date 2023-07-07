@@ -347,7 +347,7 @@ void applySelectedScale() {
   setLayoutLEDs();
 }
 
-bool scaleLock = false;  // For enabling built-in buzzer for sound generation without a computer
+bool scaleLock = false;  // For disabling all keys not in the selected scale
 GEMItem menuItemScaleLock("Scale Lock:", scaleLock, setLayoutLEDs);
 
 int transpose = 0;
@@ -377,7 +377,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
 boolean release = false;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.2.1 ", release, GEM_READONLY);
+GEMItem menuItemVersion("V0.3.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
