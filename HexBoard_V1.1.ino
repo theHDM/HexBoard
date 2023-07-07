@@ -900,7 +900,8 @@ void sequencerPlayNextNote() {
 byte getHeldNote() {
   for (int i = 0; i < elementCount; i++) {
     if (activeButtons[i]) {
-      if (currentLayout[i] < 128) {
+      byte note = (currentLayout[i] - key + transpose) % 12;
+      if (currentLayout[i] < 128 && isNotePlayable(note)) {
         return (currentLayout[i] + transpose) % 128;
       }
     }
