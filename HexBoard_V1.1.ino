@@ -371,13 +371,18 @@ SelectOptionByte selectBrightnessOptions[] = { { "Night", 10 }, { "Dim", 30 }, {
 GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOptionByte), selectBrightnessOptions);
 GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
 
+byte lightMode = 0;
+SelectOptionByte selectLightingOptions[] = { { "Button", 0 }, { "Note", 1 }, { "Octave", 2 }, { "Splash", 3 }, { "Star", 4 } };
+GEMSelect selectLighting(sizeof(selectLightingOptions) / sizeof(SelectOptionByte), selectLightingOptions);
+GEMItem menuItemLighting("Lighting:", lightMode, selectLighting);
+
 bool buzzer = false;  // For enabling built-in buzzer for sound generation without a computer
 GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = true;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.3.0 ", release, GEM_READONLY);
+boolean release = false;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.3.1 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -756,6 +761,7 @@ bool isNotePlayable(byte note) {
   if (!scaleLock) {
     return true;  // Return true unconditionally if the toggle is disabled
   }
+  note = (note - key + transpose) % 12;
   for (int k = 0; k < 12; k++) {
     if (note == selectedScale[k]) {
       return true;
@@ -781,8 +787,7 @@ void playNotes() {
       if (activeButtons[i] == 1)  // If the button is active (newpress)
       {
         if (currentLayout[i] < 128) {
-          byte note = (currentLayout[i] - key + transpose) % 12;
-          if (isNotePlayable(note)) {  // If note is within the selected scale, light up and play
+          if (isNotePlayable(currentLayout[i])) {  // If note is within the selected scale, light up and play
             strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
             noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
           }
@@ -792,8 +797,7 @@ void playNotes() {
       } else {
         // If the button is inactive (released)
         if (currentLayout[i] < 128) {
-          byte note = (currentLayout[i] - key + transpose) % 12;
-          if (isNotePlayable(note)) {
+          if (isNotePlayable(currentLayout[i])) {
             setLayoutLED(i);
             noteOff(midiChannel, (currentLayout[i] + transpose) % 128, 0);
           }
@@ -900,8 +904,7 @@ void sequencerPlayNextNote() {
 byte getHeldNote() {
   for (int i = 0; i < elementCount; i++) {
     if (activeButtons[i]) {
-      byte note = (currentLayout[i] - key + transpose) % 12;
-      if (currentLayout[i] < 128 && isNotePlayable(note)) {
+      if (currentLayout[i] < 128 && isNotePlayable(currentLayout[i])) {
         return (currentLayout[i] + transpose) % 128;
       }
     }
