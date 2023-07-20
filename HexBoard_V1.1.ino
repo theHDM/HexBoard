@@ -44,9 +44,9 @@ int dimBrightness = 20;
 int pressedBrightness = 255;
 #elif ModelNumber == 2
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-int stripBrightness = 110;
-int defaultBrightness = 140;
-int dimBrightness = 40;
+int stripBrightness = 130;
+int defaultBrightness = 100;
+int dimBrightness = 36;
 int pressedBrightness = 255;
 #endif
 
@@ -367,7 +367,11 @@ GEMSelect selectModSpeed(sizeof(selectModSpeedOptions) / sizeof(SelectOptionByte
 GEMItem menuItemModSpeed("Mod Wheel:", modWheelSpeed, selectModSpeed);
 
 void setBrightness();  //Forward declaration
-SelectOptionByte selectBrightnessOptions[] = { { "Night", 10 }, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Highest", 210 }, { "MAX(!!)", 255 } };
+#if ModelNumber == 1
+SelectOptionByte selectBrightnessOptions[] = { { "Night", 10 }, { "Dim", 30 }, { "Low", 70 }, { "Medium", 110 }, { "High", 160 }, { "Higher", 210 }, { "MAX(!!)", 255 } };
+#elif ModelNumber == 2  // Reducing options to simplify and because the lights aren't as bright.
+SelectOptionByte selectBrightnessOptions[] = { { "Dim", 20 }, { "Low", 70 }, { "Medium", 130 }, { "High", 190 }, { "Max", 255 } };
+#endif
 GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOptionByte), selectBrightnessOptions);
 GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
 
