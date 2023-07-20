@@ -239,7 +239,8 @@ bool pitchModToggle = 1;    // Used to toggle between pitch bend and mod wheel
 byte activeButtons[elementCount];               // Array to hold current note button states
 byte previousActiveButtons[elementCount];       // Array to hold previous note button states for comparison
 unsigned long activeButtonsTime[elementCount];  // Array to track last note button activation time for debounce
-
+byte animationStep[elementCount];               // Array to track reactive lighting steps
+int animationTime = 0;                          // Used for tracking how long since last lighting update
 // Variables for sequencer mode
 typedef struct {
   bool steps[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -386,7 +387,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
 boolean release = false;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.3.1 ", release, GEM_READONLY);
+GEMItem menuItemVersion("V0.4.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -517,6 +518,9 @@ void loop() {
     // Held buttons
     heldButtons();
   }
+
+  // Animations
+  reactiveLighting();
 
   // Do the LEDS
   strip.show();
@@ -792,7 +796,7 @@ void playNotes() {
       {
         if (currentLayout[i] < 128) {
           if (isNotePlayable(currentLayout[i])) {  // If note is within the selected scale, light up and play
-            strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
+            //strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
             noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
           }
         } else {
@@ -802,7 +806,7 @@ void playNotes() {
         // If the button is inactive (released)
         if (currentLayout[i] < 128) {
           if (isNotePlayable(currentLayout[i])) {
-            setLayoutLED(i);
+            //setLayoutLED(i);
             noteOff(midiChannel, (currentLayout[i] + transpose) % 128, 0);
           }
         } else {
@@ -810,6 +814,166 @@ void playNotes() {
         }
       }
     }
+  }
+}
+
+void reactiveLighting() {
+  animationTime = animationTime + loopTime;
+  if (animationTime >= 33) {                                             // If it has been at least 33 ms (30fps) from last run,
+    animationTime = 0;                                                   // reset clock.
+    setLayoutLEDs();                                                     // Start by setting the lights to their defaults so we can "paint" on top of it.
+    for (int i = 0; i < elementCount; i++) {                             // Scanning through the buttons
+      if (isNotePlayable(currentLayout[i]) && currentLayout[i] < 128) {  // (if they are playable)
+        switch (lightMode) {                                             // and implementing the selected lighting pattern
+          case 0:
+            buttonPattern(i);  // Lights up the button pressed.
+            break;
+          case 1:
+            notePattern(i);  // Lights up the same exact notes as played across the array.
+            break;
+          case 2:
+            octavePattern(i);  // Lights up the same notes as played in all octaves across the array.
+            break;
+          case 3:
+            splashPattern(i);  // Creates an expanding ring around the pressed button.
+            break;
+          case 4:
+            starPattern(i);  // Creates a starburst around the pressed button.
+            break;
+          default:  // Just in case something goes wrong?
+            buttonPattern(i);
+            break;
+        }
+      }
+    }
+  }
+}
+
+void buttonPattern(int i) {
+  if (activeButtons[i] == 1) {  // If it's an active button...
+    // ...then we light it up!
+    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+  }
+}
+
+void notePattern(int i) {
+  if (activeButtons[i] == 1) {                       // Check to see if the it's an active button.
+    for (int m = 0; m < elementCount; m++) {         // Scanning through all the lights
+      if (currentLayout[m] < 128) {                  // Only runs on lights in the playable area
+        if (currentLayout[m] == currentLayout[i]) {  // If it's the same note as the active button...
+          // ...then we light it up!
+          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+        }
+      }
+    }
+  }
+}
+
+void octavePattern(int i) {
+  if (activeButtons[i] == 1) {                                 // Check to see if the it's an active button.
+    for (int m = 0; m < elementCount; m++) {                   // Scanning through all the lights
+      if (currentLayout[m] < 128) {                            // Only runs on lights in the playable area
+        if (currentLayout[m] % 12 == currentLayout[i] % 12) {  // If it's in different octaves as the active button...
+          // ...then we light it up!
+          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+        }
+      }
+    }
+  }
+}
+
+void splashPattern(int i) {
+  int x1 = i % 10;  // Calculate the coordinates of the pressed button
+  int y1 = i / 10;
+  if (animationStep[i] > 0) {                 // Oh boy, animation time! Might be overcomplicating this...
+    for (int m = 0; m < elementCount; m++) {  // Scanning through all the lights
+      if (currentLayout[m] < 128) {           // Only runs on lights in the playable area
+        int x2 = m % 10;                      // Coordinates of lights
+        int y2 = m / 10;
+        int dx = x1 - x2;  // Difference between light and button pressed
+        int dy = y1 - y2;
+// Penalty int shifts the lights over depending on if they are on odd or even rows to correct for the staggered rows
+#if ModelNumber == 1
+        int penalty = (((y1 % 2 == 0) && (y2 % 2 != 0) && (x1 > x2)) || ((y2 % 2 == 0) && (y1 % 2 != 0) && (x2 > x1))) ? 1 : 0;
+#elif ModelNumber == 2
+        int penalty = (((y1 % 2 == 0) && (y2 % 2 != 0) && (x1 < x2)) || ((y2 % 2 == 0) && (y1 % 2 != 0) && (x2 < x1))) ? 1 : 0;
+#endif
+        // If the light is the correct distance from the button...
+        if (max(abs(dy), abs(dx) + floor(abs(dy) / 2) + penalty) == animationStep[i]) {
+          // light it up!
+          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+          // or we could have it fade as it moves
+          //strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, (pressedBrightness - animationStep[i]*12)));
+        }
+      }
+    }
+  }
+  if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
+    // Then we light up the pressed button
+    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+    if (animationStep[i] < 16) {
+      animationStep[i]++;  // Increment the animation to the next step for next time.
+    }
+  } else {
+    animationStep[i] = 0;  // Stop the animation if the key is released
+  }
+}
+
+void starPattern(int i) {
+  int x1 = i % 10;  // Calculate the coordinates of the pressed button
+  int y1 = i / 10;
+  // Define the relative offsets of neighboring buttons in the pattern
+#if ModelNumber == 1
+  int offsets[][2] = {
+    { 0, 1 },                        // Left
+    { 0, -1 },                       // Right
+    { -1, (y1 % 2 == 0) ? 0 : -1 },  // Top Left (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? 1 : 0 },   // Top Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 1 : 0 },    // Bottom Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 0 : -1 }    // Bottom Left (adjusted based on row parity)
+  };
+#elif ModelNumber == 2
+  int offsets[][2] = {
+    { 0, -1 },                       // Left
+    { 0, 1 },                        // Right
+    { -1, (y1 % 2 == 0) ? 0 : 1 },  // Top Left (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? -1 : 0 },   // Top Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? -1 : 0 },    // Bottom Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 0 : 1 }    // Bottom Left (adjusted based on row parity)
+  };
+#endif
+
+
+  if (animationStep[i] > 0) {  // Oh boy, animation time!
+    for (const auto& offset : offsets) {
+      // Calculate the neighboring button coordinates
+      int y2 = y1 + offset[0] * animationStep[i];
+#if ModelNumber == 1
+      int x2 = x1 + offset[1] * animationStep[i] + ((y1 % 2 == 0) ? -1 : 1) * ((y1 == y2) ? 0 : 1) * (animationStep[i] / 2);
+#elif ModelNumber == 2
+      int x2 = x1 + offset[1] * animationStep[i] + ((y1 % 2 == 0) ? 1 : -1) * ((y1 == y2) ? 0 : 1) * (animationStep[i] / 2);
+#endif
+      // Check if the neighboring button is within the layout boundaries
+      if (y2 >= 0 && y2 < 14 && x2 >= 0 && x2 < 10) {
+        // Calculate the index of the neighboring button
+        int neighborIndex = y2 * 10 + x2;
+        if (currentLayout[neighborIndex] < 128) {  // If it's in the playable area...
+          // ...set the color for the neighboring button
+          strip.setPixelColor(neighborIndex, strip.ColorHSV(((currentLayout[neighborIndex] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+        }
+      }
+    }
+  }
+
+
+  if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
+    // Then we light up the pressed button
+    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+    if (animationStep[i] < 16) {
+      animationStep[i]++;  // Increment the animation to the next step for next time.
+    }
+  } else {
+    animationStep[i] = 0;  // Stop the animation if the key is released
   }
 }
 
@@ -1033,6 +1197,7 @@ void setupMenu() {
   menuPageMain.addMenuItem(menuItemBendSpeed);
   menuPageMain.addMenuItem(menuItemModSpeed);
   menuPageMain.addMenuItem(menuItemBrightness);
+  menuPageMain.addMenuItem(menuItemLighting);
   menuPageMain.addMenuItem(menuItemBuzzer);
   menuPageMain.addMenuItem(menuItemTesting);
   // Add menu items to Layout Select page
