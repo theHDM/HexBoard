@@ -386,7 +386,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = false;  // Whether this is a release or not
+boolean release = true;  // Whether this is a release or not
 GEMItem menuItemVersion("V0.4.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
@@ -589,10 +589,10 @@ void commandPress(byte command) {
 void commandRelease(byte command) {
 }
 
-void pitchBend() {  //todo: possibly add a check where if no notes are active, make the pitch bend instant.
-
+void pitchBend() {
   // Default: no pitch change
   int pitchBendTarget = 0;
+  // Otherwise set the targetted value based on the buttons pressed.
   if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
     pitchBendTarget = 8191;  // Whole pitch up
   } else if (activeButtons[cmdBtn5] && activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
@@ -646,8 +646,8 @@ void pitchBend() {  //todo: possibly add a check where if no notes are active, m
   }
 }
 
-void modWheel() {  ///IN THE MIDDLE OF HACKING SOMETHING TOGETHER - pardon the mess
-  //BIG IDEA! Set target based on what keys are being pressed. Then use that target as a variable instead of the static numbers hard coded per target.
+void modWheel() {
+  //Set targetted value based on what keys are being pressed.
   byte modWheelTarget = 0;
   if (activeButtons[cmdBtn5] && !activeButtons[cmdBtn6] && !activeButtons[cmdBtn7]) {
     modWheelTarget = 127;
@@ -882,6 +882,10 @@ void octavePattern(int i) {
   }
 }
 
+/* Kinda inefficient - adds 3ms to the loop timer for every 4 buttons held, but does not affect playability yet.
+If performance becomes an issue, this may be better handled by a lookup table or something like that.
+Another thing I'm considering is having an array for the lights that is populated as it runs the loops and only does setPixelColor at the
+end. This would allow me to have the brightness fade and only add to the array if the light is brighter than what's currently there.*/
 void splashPattern(int i) {
   int x1 = i % 10;  // Calculate the coordinates of the pressed button
   int y1 = i / 10;
@@ -919,7 +923,7 @@ void splashPattern(int i) {
   }
 }
 
-void starPattern(int i) {
+void starPattern(int i) { // This one is far more efficient with no noticeable performance hit when playing lots of notes at once.
   int x1 = i % 10;  // Calculate the coordinates of the pressed button
   int y1 = i / 10;
   // Define the relative offsets of neighboring buttons in the pattern
