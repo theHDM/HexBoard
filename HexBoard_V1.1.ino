@@ -304,43 +304,44 @@ SelectOptionByte selectScaleOptions[] = { { "ALL", 0 }, { "Major", 1 }, { "HarMi
 GEMSelect selectScale(sizeof(selectScaleOptions) / sizeof(SelectOptionByte), selectScaleOptions);
 GEMItem menuItemScale("Scale:", scale, selectScale, applySelectedScale);
 
-std::array<byte, 12> selectedScale;
-// Scale arrays
-const std::array<byte, 12> chromaticScale = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
-const std::array<byte, 12> majorScale = { 0, 2, 4, 5, 7, 9, 11, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> harmonicMinorScale = { 0, 2, 3, 5, 7, 8, 11, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> melodicMinorScale = { 0, 2, 3, 5, 7, 9, 11, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> naturalMinorScale = { 0, 2, 3, 5, 7, 8, 10, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> pentatonicMajorScale = { 0, 2, 4, 7, 9, 0, 0, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> pentatonicMinorScale = { 0, 3, 5, 7, 10, 0, 0, 0, 0, 0, 0, 0 };
-const std::array<byte, 12> bluesScale = { 0, 3, 5, 6, 7, 10, 0, 0, 0, 0, 0, 0 };
+const bool (*selectedScale)[12];
+// Scale arrays of boolean (for O(1) access instead of O(12/2))
+//                                   0 1 2 3 4 5 6 7 8 9 X E
+const bool chromaticScale[12]     = {1,1,1,1,1,1,1,1,1,1,1,1};
+const bool majorScale[12]         = {1,0,1,0,1,1,0,1,0,1,0,1};
+const bool harmonicMinorScale[12] = {1,0,1,1,0,1,0,1,1,0,0,1};
+const bool melodicMinorScale[12]  = {1,0,1,1,0,1,0,1,0,1,0,1};
+const bool naturalMinorScale[12]  = {1,0,1,1,0,1,0,1,1,0,1,0};
+const bool pentatonicMajorScale[12]={1,0,1,0,1,0,0,1,0,1,0,0};
+const bool pentatonicMinorScale[12]={1,0,0,1,0,1,0,1,0,0,1,0};
+const bool bluesScale[12]         = {1,0,0,1,0,1,1,1,0,0,1,0};
 
 // Function to apply the selected scale
 void applySelectedScale() {
   switch (scale) {
     case 0:  // All notes
-      selectedScale = chromaticScale;
+      selectedScale = &chromaticScale;
       break;
     case 1:  // Major scale
-      selectedScale = majorScale;
+      selectedScale = &majorScale;
       break;
     case 2:  // Harmonic minor scale
-      selectedScale = harmonicMinorScale;
+      selectedScale = &harmonicMinorScale;
       break;
     case 3:  // Melodic minor scale
-      selectedScale = melodicMinorScale;
+      selectedScale = &melodicMinorScale;
       break;
     case 4:  // Natural minor scale
-      selectedScale = naturalMinorScale;
+      selectedScale = &naturalMinorScale;
       break;
     case 5:  // Pentatonic major scale
-      selectedScale = pentatonicMajorScale;
+      selectedScale = &pentatonicMajorScale;
       break;
     case 6:  // Pentatonic minor scale
-      selectedScale = pentatonicMinorScale;
+      selectedScale = &pentatonicMinorScale;
       break;
     case 7:  // Blues scale
-      selectedScale = bluesScale;
+      selectedScale = &bluesScale;
       break;
     default:
       break;
@@ -386,7 +387,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = true;  // Whether this is a release or not
+boolean release = false;  // Whether this is a release or not
 GEMItem menuItemVersion("V0.4.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
@@ -460,7 +461,7 @@ void setup() {
   strip.setBrightness(stripBrightness);  // Set BRIGHTNESS (max = 255)
   setCMD_LEDs();
   strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, pressedBrightness));
-  selectedScale = chromaticScale;  // Set default scale
+  selectedScale = &chromaticScale;  // Set default scale
   setLayoutLEDs();
 
   u8g2.begin();               //Menu and graphics setup
@@ -770,19 +771,15 @@ bool isNotePlayable(byte note) {
     return true;  // Return true unconditionally if the toggle is disabled
   }
   note = (note - key + transpose) % 12;
-  for (int k = 0; k < 12; k++) {
-    if (note == selectedScale[k]) {
-      return true;
-    }
+  if((*selectedScale)[note]) {
+    return true;
   }
   return false;
 }
 // Used by things not affected by scaleLock
 bool isNoteLit(byte note) {
-  for (int k = 0; k < 12; k++) {
-    if (note == selectedScale[k]) {
-      return true;
-    }
+  if((*selectedScale)[note%12]){
+    return true;
   }
   return false;
 }
