@@ -149,6 +149,8 @@ const byte cmdBtn7 = 120;
 #endif
 
 // MIDI note layout tables
+
+// ./makeLayout.py 90 2 -7
 const byte wickiHaydenLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 90, 92, 94, 96, 98, 100, 102, 104, 106),
         ROW_FLIP(83, 85, 87, 89, 91, 93, 95, 97, 99, 101),
@@ -159,12 +161,13 @@ const byte wickiHaydenLayout[elementCount] = {
   ROW_FLIP(CMDB_4, 54, 56, 58, 60, 62, 64, 66, 68, 70),
         ROW_FLIP(47, 49, 51, 53, 55, 57, 59, 61, 63, 65),
   ROW_FLIP(CMDB_5, 42, 44, 46, 48, 50, 52, 54, 56, 58),
-     ROW_FLIP(35, 37, 39, 41, 43, 45, 47, 49, 51, 53),
+        ROW_FLIP(35, 37, 39, 41, 43, 45, 47, 49, 51, 53),
   ROW_FLIP(CMDB_6, 30, 32, 34, 36, 38, 40, 42, 44, 46),
         ROW_FLIP(23, 25, 27, 29, 31, 33, 35, 37, 39, 41),
   ROW_FLIP(CMDB_7, 18, 20, 22, 24, 26, 28, 30, 32, 34),
         ROW_FLIP(11, 13, 15, 17, 19, 21, 23, 25, 27, 29)
 };
+// ./makeLayout.py 95 -7 3
 const byte harmonicTableLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 95, 88, 81, 74, 67, 60, 53, 46, 39),
         ROW_FLIP(98, 91, 84, 77, 70, 63, 56, 49, 42, 35),
@@ -181,6 +184,7 @@ const byte harmonicTableLayout[elementCount] = {
   ROW_FLIP(CMDB_7, 89, 82, 75, 68, 61, 54, 47, 40, 33),
         ROW_FLIP(92, 85, 78, 71, 64, 57, 50, 43, 36, 29)
 };
+// ./makeLayout.py 86 -1 -3
 const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 86, 85, 84, 83, 82, 81, 80, 79, 78),
         ROW_FLIP(83, 82, 81, 80, 79, 78, 77, 76, 75, 74),
@@ -195,7 +199,7 @@ const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_6, 51, 50, 49, 48, 47, 46, 45, 44, 43),
         ROW_FLIP(48, 47, 46, 45, 44, 43, 42, 41, 40, 39),
   ROW_FLIP(CMDB_7, 44, 43, 42, 41, 40, 39, 38, 37, 36),
-  ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
+        ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
 };
 const byte* currentLayout = wickiHaydenLayout;
 
