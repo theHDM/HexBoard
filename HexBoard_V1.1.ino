@@ -8,7 +8,7 @@
 // Sketch > Export Compiled Binary
 //
 // Brilliant resource for dealing with hexagonal coordinates. https://www.redblobgames.com/grids/hexagons/
-// Might be useful for animations and stuff like that.
+// Used this to get my hexagonal animations sorted. http://ondras.github.io/rot.js/manual/#hex/indexing
 
 // Menu library documentation https://github.com/Spirik/GEM
 
@@ -151,54 +151,55 @@ const byte cmdBtn7 = 120;
 // MIDI note layout tables
 const byte wickiHaydenLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 90, 92, 94, 96, 98, 100, 102, 104, 106),
-  ROW_FLIP(83, 85, 87, 89, 91, 93, 95, 97, 99, 101),
+        ROW_FLIP(83, 85, 87, 89, 91, 93, 95, 97, 99, 101),
   ROW_FLIP(CMDB_2, 78, 80, 82, 84, 86, 88, 90, 92, 94),
-  ROW_FLIP(71, 73, 75, 77, 79, 81, 83, 85, 87, 89),
+        ROW_FLIP(71, 73, 75, 77, 79, 81, 83, 85, 87, 89),
   ROW_FLIP(CMDB_3, 66, 68, 70, 72, 74, 76, 78, 80, 82),
-  ROW_FLIP(59, 61, 63, 65, 67, 69, 71, 73, 75, 77),
+        ROW_FLIP(59, 61, 63, 65, 67, 69, 71, 73, 75, 77),
   ROW_FLIP(CMDB_4, 54, 56, 58, 60, 62, 64, 66, 68, 70),
-  ROW_FLIP(47, 49, 51, 53, 55, 57, 59, 61, 63, 65),
+        ROW_FLIP(47, 49, 51, 53, 55, 57, 59, 61, 63, 65),
   ROW_FLIP(CMDB_5, 42, 44, 46, 48, 50, 52, 54, 56, 58),
-  ROW_FLIP(35, 37, 39, 41, 43, 45, 47, 49, 51, 53),
+     ROW_FLIP(35, 37, 39, 41, 43, 45, 47, 49, 51, 53),
   ROW_FLIP(CMDB_6, 30, 32, 34, 36, 38, 40, 42, 44, 46),
-  ROW_FLIP(23, 25, 27, 29, 31, 33, 35, 37, 39, 41),
+        ROW_FLIP(23, 25, 27, 29, 31, 33, 35, 37, 39, 41),
   ROW_FLIP(CMDB_7, 18, 20, 22, 24, 26, 28, 30, 32, 34),
-  ROW_FLIP(11, 13, 15, 17, 19, 21, 23, 25, 27, 29)
+        ROW_FLIP(11, 13, 15, 17, 19, 21, 23, 25, 27, 29)
 };
 const byte harmonicTableLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 95, 88, 81, 74, 67, 60, 53, 46, 39),
-  ROW_FLIP(98, 91, 84, 77, 70, 63, 56, 49, 42, 35),
+        ROW_FLIP(98, 91, 84, 77, 70, 63, 56, 49, 42, 35),
   ROW_FLIP(CMDB_2, 94, 87, 80, 73, 66, 59, 52, 45, 38),
-  ROW_FLIP(97, 90, 83, 76, 69, 62, 55, 48, 41, 34),
+        ROW_FLIP(97, 90, 83, 76, 69, 62, 55, 48, 41, 34),
   ROW_FLIP(CMDB_3, 93, 86, 79, 72, 65, 58, 51, 44, 37),
-  ROW_FLIP(96, 89, 82, 75, 68, 61, 54, 47, 40, 33),
+        ROW_FLIP(96, 89, 82, 75, 68, 61, 54, 47, 40, 33),
   ROW_FLIP(CMDB_4, 92, 85, 78, 71, 64, 57, 50, 43, 36),
-  ROW_FLIP(95, 88, 81, 74, 67, 60, 53, 46, 39, 32),
+        ROW_FLIP(95, 88, 81, 74, 67, 60, 53, 46, 39, 32),
   ROW_FLIP(CMDB_5, 91, 84, 77, 70, 63, 56, 49, 42, 35),
-  ROW_FLIP(94, 87, 80, 73, 66, 59, 52, 45, 38, 31),
+        ROW_FLIP(94, 87, 80, 73, 66, 59, 52, 45, 38, 31),
   ROW_FLIP(CMDB_6, 90, 83, 76, 69, 62, 55, 48, 41, 34),
-  ROW_FLIP(93, 86, 79, 72, 65, 58, 51, 44, 37, 30),
+        ROW_FLIP(93, 86, 79, 72, 65, 58, 51, 44, 37, 30),
   ROW_FLIP(CMDB_7, 89, 82, 75, 68, 61, 54, 47, 40, 33),
-  ROW_FLIP(92, 85, 78, 71, 64, 57, 50, 43, 36, 29)
+        ROW_FLIP(92, 85, 78, 71, 64, 57, 50, 43, 36, 29)
 };
 const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_1, 86, 85, 84, 83, 82, 81, 80, 79, 78),
-  ROW_FLIP(83, 82, 81, 80, 79, 78, 77, 76, 75, 74),
+        ROW_FLIP(83, 82, 81, 80, 79, 78, 77, 76, 75, 74),
   ROW_FLIP(CMDB_2, 79, 78, 77, 76, 75, 74, 73, 72, 71),
-  ROW_FLIP(76, 75, 74, 73, 72, 71, 70, 69, 68, 67),
+        ROW_FLIP(76, 75, 74, 73, 72, 71, 70, 69, 68, 67),
   ROW_FLIP(CMDB_3, 72, 71, 70, 69, 68, 67, 66, 65, 64),
-  ROW_FLIP(69, 68, 67, 66, 65, 64, 63, 62, 61, 60),
+        ROW_FLIP(69, 68, 67, 66, 65, 64, 63, 62, 61, 60),
   ROW_FLIP(CMDB_4, 65, 64, 63, 62, 61, 60, 59, 58, 57),
-  ROW_FLIP(62, 61, 60, 59, 58, 57, 56, 55, 54, 53),
+        ROW_FLIP(62, 61, 60, 59, 58, 57, 56, 55, 54, 53),
   ROW_FLIP(CMDB_5, 58, 57, 56, 55, 54, 53, 52, 51, 50),
-  ROW_FLIP(55, 54, 53, 52, 51, 50, 49, 48, 47, 46),
+        ROW_FLIP(55, 54, 53, 52, 51, 50, 49, 48, 47, 46),
   ROW_FLIP(CMDB_6, 51, 50, 49, 48, 47, 46, 45, 44, 43),
-  ROW_FLIP(48, 47, 46, 45, 44, 43, 42, 41, 40, 39),
+        ROW_FLIP(48, 47, 46, 45, 44, 43, 42, 41, 40, 39),
   ROW_FLIP(CMDB_7, 44, 43, 42, 41, 40, 39, 38, 37, 36),
   ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
 };
 const byte* currentLayout = wickiHaydenLayout;
 
+// These are for standard tuning only
 const unsigned int pitches[128] = {
   16, 17, 18, 19, 21, 22, 23, 25, 26, 28, 29, 31,                                  // Octave 0
   33, 35, 37, 39, 41, 44, 46, 49, 52, 55, 58, 62,                                  // Octave 1
@@ -307,6 +308,7 @@ GEMItem menuItemScale("Scale:", scale, selectScale, applySelectedScale);
 const bool (*selectedScale)[12];
 // Scale arrays of boolean (for O(1) access instead of O(12/2))
 //                                   0 1 2 3 4 5 6 7 8 9 X E
+const bool noneScale[12]          = {0,0,0,0,0,0,0,0,0,0,0,0};
 const bool chromaticScale[12]     = {1,1,1,1,1,1,1,1,1,1,1,1};
 const bool majorScale[12]         = {1,0,1,0,1,1,0,1,0,1,0,1};
 const bool harmonicMinorScale[12] = {1,0,1,1,0,1,0,1,1,0,0,1};
@@ -343,7 +345,8 @@ void applySelectedScale() {
     case 7:  // Blues scale
       selectedScale = &bluesScale;
       break;
-    default:
+    default: // Dim all LEDs
+      selectedScale = &noneScale;
       break;
   }
   setLayoutLEDs();
