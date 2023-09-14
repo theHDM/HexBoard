@@ -240,6 +240,27 @@ const unsigned int pitches[128] = {
   22350,                                                                           // F10
   23680                                                                            // F#10
 };
+const unsigned int pitches19[128] = {
+// start close to C
+264, 274, 284, 295, 306, 317, 329, 341, 354, 367, 380, 394, 409, 424,
+// Octave starting at A=440
+440, 456, 473, 491, 509, 528, 548, 568, 589, 611, 634, 657, 682, 707, 733, 761, 789, 818, 848,
+880, 913, 947, 982, 1018, 1056, 1095, 1136, 1178, 1222, 1267, 1315, 1363, 1414, 1467, 1521, 1578, 1636, 1697,
+1760, 1825, 1893, 1964, 2037, 2112, 2191, 2272, 2356, 2444, 2535, 2629, 2727, 2828, 2933, 3042, 3155, 3272, 3394,
+3520, 3651, 3786, 3927, 4073, 4224, 4381, 4544, 4713, 4888, 5070, 5258, 5453, 5656, 5866, 6084, 6310, 6545, 6788,
+7040, 7302, 7573, 7854, 8146, 8449, 8763, 9088, 9426, 9776, 10139, 10516, 10907, 11312, 11732, 12168, 12620, 13089, 13576,
+14080, 14603, 15146, 15708, 16292, 16897, 17525, 18176, 18852, 19552, 20279, 21032, 21814, 22624, 23465, 24336, 25241, 26179, 27151
+};
+const unsigned int pitches24[128] = {
+// start close to C
+262, 269, 277, 285, 294, 302, 311, 320, 330, 339, 349, 359, 370, 381, 392, 403, 415, 427,
+// Octave starting at A=440
+440, 453, 466, 480, 494, 508, 523, 539, 554, 571, 587, 605, 622, 640, 659, 679, 698, 719, 740, 762, 784, 807, 831, 855,
+880, 906, 932, 960, 988, 1017, 1047, 1077, 1109, 1141, 1175, 1209, 1245, 1281, 1319, 1357, 1397, 1438, 1480, 1523, 1568, 1614, 1661, 1710,
+1760, 1812, 1865, 1919, 1976, 2033, 2093, 2154, 2217, 2282, 2349, 2418, 2489, 2562, 2637, 2714, 2794, 2876, 2960, 3047, 3136, 3228, 3322, 3420,
+3520, 3623, 3729, 3839, 3951, 4067, 4186, 4309, 4435, 4565, 4699, 4836, 4978, 5124, 5274, 5429, 5588, 5751, 5920, 6093, 6272, 6456, 6645, 6840,
+7040, 7246, 7459, 7677, 7902, 8134, 8372, 8617, 8870, 9130, 9397, 9673, 9956, 10248
+};
 // 41-TET 41 equal temperament
 const unsigned int pitches41[128] = {
 // Start close to C
@@ -429,7 +450,7 @@ void sequencerSetup();  //Forward declaration
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
 
 int tones = 12; // Experimental microtonal support
-SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"41", 41}};
+SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"19", 19}, {"24", 24}, {"41", 41}};
 GEMSelect selectTones(sizeof(selectTonesOptions)/sizeof(SelectOptionInt), selectTonesOptions);
 GEMItem menuItemTones("Tones:", tones, selectTones);
 
@@ -914,7 +935,7 @@ void octavePattern(int i) {
   if (activeButtons[i] == 1) {                                 // Check to see if the it's an active button.
     for (int m = 0; m < elementCount; m++) {                   // Scanning through all the lights
       if (currentLayout[m] < 128) {                            // Only runs on lights in the playable area
-        if (currentLayout[m] % 12 == currentLayout[i] % 12) {  // If it's in different octaves as the active button...
+        if (currentLayout[m] % tones == currentLayout[i] % tones) {  // If it's in different octaves as the active button...
           // ...then we light it up!
           strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
         }
@@ -1128,6 +1149,10 @@ byte getHeldNote() {
 void do_tone(byte pitch) {
     if (tones == 12) {
         tone(TONEPIN, pitches[pitch]);
+    } else if (tones == 19) {
+        tone(TONEPIN, pitches19[pitch]);
+    } else if (tones == 24) {
+        tone(TONEPIN, pitches24[pitch]);
     } else if (tones == 41) {
         tone(TONEPIN, pitches41[pitch]);
     }
