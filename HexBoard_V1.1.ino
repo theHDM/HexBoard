@@ -359,6 +359,8 @@ void applySelectedScale() {
 bool scaleLock = false;  // For disabling all keys not in the selected scale
 GEMItem menuItemScaleLock("Scale Lock:", scaleLock, setLayoutLEDs);
 
+int tones = 12; // Experimental microtonal support
+
 int transpose = 0;
 SelectOptionInt selectTransposeOptions[] = {
   { "-12", -12 }, { "-11", -11 }, { "-10", -10 }, { "-9", -9 }, { "-8", -8 }, { "-7", -7 }, { "-6", -6 }, { "-5", -5 }, { "-4", -4 }, { "-3", -3 }, { "-2", -2 }, { "-1", -1 }, { "0", 0 }, { "+1", 1 }, { "+2", 2 }, { "+3", 3 }, { "+4", 4 }, { "+5", 5 }, { "+6", 6 }, { "+7", 7 }, { "+8", 8 }, { "+9", 9 }, { "+10", 10 }, { "+11", 11 }, { "+12", 12 }
@@ -778,14 +780,14 @@ bool isNotePlayable(byte note) {
     return true;  // Return true unconditionally if the toggle is disabled
   }
   note = (note - key + transpose) % 12;
-  if((*selectedScale)[note]) {
+  if(tones != 12 || (*selectedScale)[note]) {
     return true;
   }
   return false;
 }
 // Used by things not affected by scaleLock
 bool isNoteLit(byte note) {
-  if((*selectedScale)[note%12]){
+  if(tones != 12 || (*selectedScale)[note%12]){
     return true;
   }
   return false;
@@ -800,7 +802,7 @@ void playNotes() {
       {
         if (currentLayout[i] < 128) {
           if (isNotePlayable(currentLayout[i])) {  // If note is within the selected scale, light up and play
-            //strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 255, pressedBrightness));
+            //strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, pressedBrightness));
             noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
           }
         } else {
@@ -853,10 +855,14 @@ void reactiveLighting() {
   }
 }
 
+int keyColor(byte note) {
+    return ((note - key + transpose) % tones) * ((5006*12)/tones);
+}
+
 void buttonPattern(int i) {
   if (activeButtons[i] == 1) {  // If it's an active button...
     // ...then we light it up!
-    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
   }
 }
 
@@ -866,7 +872,7 @@ void notePattern(int i) {
       if (currentLayout[m] < 128) {                  // Only runs on lights in the playable area
         if (currentLayout[m] == currentLayout[i]) {  // If it's the same note as the active button...
           // ...then we light it up!
-          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
         }
       }
     }
@@ -879,7 +885,7 @@ void octavePattern(int i) {
       if (currentLayout[m] < 128) {                            // Only runs on lights in the playable area
         if (currentLayout[m] % 12 == currentLayout[i] % 12) {  // If it's in different octaves as the active button...
           // ...then we light it up!
-          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
         }
       }
     }
@@ -909,16 +915,16 @@ void splashPattern(int i) {
         // If the light is the correct distance from the button...
         if (max(abs(dy), abs(dx) + floor(abs(dy) / 2) + penalty) == animationStep[i]) {
           // light it up!
-          strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
           // or we could have it fade as it moves
-          //strip.setPixelColor(m, strip.ColorHSV(((currentLayout[m] - key + transpose) % 12) * 5006, 240, (pressedBrightness - animationStep[i]*12)));
+          //strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, (pressedBrightness - animationStep[i]*12)));
         }
       }
     }
   }
   if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
     // Then we light up the pressed button
-    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
     if (animationStep[i] < 16) {
       animationStep[i]++;  // Increment the animation to the next step for next time.
     }
@@ -967,7 +973,7 @@ void starPattern(int i) { // This one is far more efficient with no noticeable p
         int neighborIndex = y2 * 10 + x2;
         if (currentLayout[neighborIndex] < 128) {  // If it's in the playable area...
           // ...set the color for the neighboring button
-          strip.setPixelColor(neighborIndex, strip.ColorHSV(((currentLayout[neighborIndex] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+          strip.setPixelColor(neighborIndex, strip.ColorHSV(keyColor(currentLayout[neighborIndex]), 240, pressedBrightness));
         }
       }
     }
@@ -976,7 +982,7 @@ void starPattern(int i) { // This one is far more efficient with no noticeable p
 
   if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
     // Then we light up the pressed button
-    strip.setPixelColor(i, strip.ColorHSV(((currentLayout[i] - key + transpose) % 12) * 5006, 240, pressedBrightness));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
     if (animationStep[i] < 16) {
       animationStep[i]++;  // Increment the animation to the next step for next time.
     }
@@ -1132,16 +1138,15 @@ void setLayoutLEDs() {
   }
 }
 void setLayoutLED(int i) {
-  int note = (currentLayout[i] - key + transpose) % 12;
   if (scaleLock) {
-    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, 0));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, 0));
   } else {
-    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, dimBrightness));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, dimBrightness));
   }
 
   // Scale highlighting
   if (isNoteLit(note)) {
-    strip.setPixelColor(i, strip.ColorHSV(note * 5006, 255, defaultBrightness));
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, defaultBrightness));
   }
 }
 
