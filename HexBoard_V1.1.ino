@@ -230,8 +230,8 @@ const unsigned int pitches41[128] = {
 // Octave
 440, 448, 455, 463, 471, 479, 487, 495, 504, 512, 521, 530, 539, 548, 557, 567, 577, 587, 597, 607, 617, 628, 638, 649, 660, 671, 683, 695, 706, 718, 731, 743, 756, 769, 782, 795, 809, 822, 836, 851, 865,
 880, 895, 910, 926, 942, 958, 974, 991, 1007, 1025, 1042, 1060, 1078, 1096, 1115, 1134, 1153, 1173, 1193, 1213, 1234, 1255, 1276, 1298, 1320, 1343, 1366, 1389, 1413, 1437, 1461, 1486, 1512, 1537, 1564, 1590, 1617, 1645, 1673, 1701, 1730,
-1760, 1790, 1821, 1852, 1883, 1915, 1948, 1981, 2015, 2049, 2084, 2120, 2156, 2193, 2230]
-}
+1760, 1790, 1821, 1852, 1883, 1915, 1948, 1981, 2015, 2049, 2084, 2120, 2156, 2193, 2230
+};
 #define TONEPIN 23
 
 // Global time variables
@@ -411,8 +411,8 @@ GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
 
 int tones = 12; // Experimental microtonal support
 SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"41", 41}};
-GEMSelect selectTones(sizeof(tonesOptions)/sizeof(SelectOptionInt), tonesOptions);
-GemItem menuItemTones("Tones:", tones, selectTones);
+GEMSelect selectTones(sizeof(selectTonesOptions)/sizeof(SelectOptionInt), selectTonesOptions);
+GEMItem menuItemTones("Tones:", tones, selectTones);
 
 // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
 byte menuItemHeight = 10;
@@ -1165,7 +1165,7 @@ void setLayoutLED(int i) {
   }
 
   // Scale highlighting
-  if (isNoteLit(note)) {
+  if (isNoteLit(currentLayout[i])) {
     strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, defaultBrightness));
   }
 }
