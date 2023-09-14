@@ -201,6 +201,23 @@ const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_7, 44, 43, 42, 41, 40, 39, 38, 37, 36),
         ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
 };
+// This layout can't be created by makeLayout.py
+const byte ezMajorLayout[elementCount] = { //Testing layout viability - probably will make this generative so we can easily add scales once figured out
+  ROW_FLIP(CMDB_1, 91, 93, 95, 96, 98, 100, 101, 103, 105),
+        ROW_FLIP(84, 86, 88, 89, 91, 93, 95, 96, 98, 100),
+  ROW_FLIP(CMDB_2, 79, 81, 83, 84, 86, 88, 89, 91, 93),
+        ROW_FLIP(72, 74, 76, 77, 79, 81, 83, 84, 86, 88),
+  ROW_FLIP(CMDB_3, 67, 69, 71, 72, 74, 76, 77, 79, 81),
+        ROW_FLIP(60, 62, 64, 65, 67, 69, 71, 72, 74, 76),
+  ROW_FLIP(CMDB_4, 55, 57, 59, 60, 62, 64, 65, 67, 69),
+        ROW_FLIP(48, 50, 52, 53, 55, 57, 59, 60, 62, 64),
+  ROW_FLIP(CMDB_5, 43, 45, 47, 48, 50, 52, 53, 55, 57),
+        ROW_FLIP(36, 38, 40, 41, 43, 45, 47, 48, 50, 52),
+  ROW_FLIP(CMDB_6, 31, 33, 35, 36, 38, 40, 41, 43, 45),
+        ROW_FLIP(24, 26, 28, 29, 31, 33, 35, 36, 38, 40),
+  ROW_FLIP(CMDB_7, 19, 21, 23, 24, 26, 28, 29, 31, 33),
+        ROW_FLIP(12, 14, 16, 17, 19, 21, 23, 24, 26, 28)
+};
 const byte* currentLayout = wickiHaydenLayout;
 
 // These are for standard tuning only
@@ -303,9 +320,11 @@ GEMItem menuItemLayout("Layout", menuPageLayout);
 void wickiHayden();  //Forward declarations
 void harmonicTable();
 void gerhard();
+void ezMajor();
 GEMItem menuItemWickiHayden("Wicki-Hayden", wickiHayden);
 GEMItem menuItemHarmonicTable("Harmonic Table", harmonicTable);
 GEMItem menuItemGerhard("Gerhard", gerhard);
+GEMItem menuItemEzMajor("EZ Major", ezMajor);
 
 void setLayoutLEDs();  //Forward declaration
 byte key = 0;
@@ -1239,6 +1258,7 @@ void setupMenu() {
   menuPageLayout.addMenuItem(menuItemGerhard);
   // Add menu items to Testing page
   menuPageTesting.addMenuItem(menuItemSequencer);
+  menuPageTesting.addMenuItem(menuItemEzMajor);
   menuPageTesting.addMenuItem(menuItemVersion);
   menuPageTesting.addMenuItem(menuItemTones);
   // Specify parent menu page for the other menu pages
@@ -1271,6 +1291,15 @@ void gerhard() {
   setLayoutLEDs();
   if (ModelNumber != 1) {
     u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void ezMajor() {
+  currentLayout = ezMajorLayout;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R2);
   }
   menu.setMenuPageCurrent(menuPageMain);
   menu.drawMenu();
