@@ -223,6 +223,15 @@ const unsigned int pitches[128] = {
   22350,                                                                           // F10
   23680                                                                            // F#10
 };
+// 41-TET 41 equal temperament
+const unsigned int pitches41[128] = {
+// Start close to C
+261, 265, 269, 274, 279, 284, 288, 293, 298, 303, 309, 314, 319, 325, 330, 336, 341, 347, 353, 359, 365, 372, 378, 384, 391, 398, 404, 411, 418, 425, 433,
+// Octave
+440, 448, 455, 463, 471, 479, 487, 495, 504, 512, 521, 530, 539, 548, 557, 567, 577, 587, 597, 607, 617, 628, 638, 649, 660, 671, 683, 695, 706, 718, 731, 743, 756, 769, 782, 795, 809, 822, 836, 851, 865,
+880, 895, 910, 926, 942, 958, 974, 991, 1007, 1025, 1042, 1060, 1078, 1096, 1115, 1134, 1153, 1173, 1193, 1213, 1234, 1255, 1276, 1298, 1320, 1343, 1366, 1389, 1413, 1437, 1461, 1486, 1512, 1537, 1564, 1590, 1617, 1645, 1673, 1701, 1730,
+1760, 1790, 1821, 1852, 1883, 1915, 1948, 1981, 2015, 2049, 2084, 2120, 2156, 2193, 2230]
+}
 #define TONEPIN 23
 
 // Global time variables
@@ -359,8 +368,6 @@ void applySelectedScale() {
 bool scaleLock = false;  // For disabling all keys not in the selected scale
 GEMItem menuItemScaleLock("Scale Lock:", scaleLock, setLayoutLEDs);
 
-int tones = 12; // Experimental microtonal support
-
 int transpose = 0;
 SelectOptionInt selectTransposeOptions[] = {
   { "-12", -12 }, { "-11", -11 }, { "-10", -10 }, { "-9", -9 }, { "-8", -8 }, { "-7", -7 }, { "-6", -6 }, { "-5", -5 }, { "-4", -4 }, { "-3", -3 }, { "-2", -2 }, { "-1", -1 }, { "0", 0 }, { "+1", 1 }, { "+2", 2 }, { "+3", 3 }, { "+4", 4 }, { "+5", 5 }, { "+6", 6 }, { "+7", 7 }, { "+8", 8 }, { "+9", 9 }, { "+10", 10 }, { "+11", 11 }, { "+12", 12 }
@@ -401,6 +408,11 @@ GEMItem menuItemVersion("V0.4.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
+
+int tones = 12; // Experimental microtonal support
+SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"41", 41}};
+GEMSelect selectTones(sizeof(tonesOptions)/sizeof(SelectOptionInt), tonesOptions);
+GemItem menuItemTones("Tones:", tones, selectTones);
 
 // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
 byte menuItemHeight = 10;
@@ -1094,6 +1106,14 @@ byte getHeldNote() {
   return 128;
 }
 
+void do_tone(byte pitch) {
+    if (tones == 12) {
+        tone(TONEPIN, pitches[pitch]);
+    } else if (tones == 41) {
+        tone(TONEPIN, pitches41[pitch]);
+    }
+}
+
 // MIDI AND OTHER OUTPUTS //
 // Send Note On
 void noteOn(byte channel, byte pitch, byte velocity) {
@@ -1106,7 +1126,7 @@ void noteOn(byte channel, byte pitch, byte velocity) {
     Serial.println(channel);
   }
   if (buzzer) {
-    tone(TONEPIN, pitches[pitch]);
+    do_tone(pitch);
   }
 }
 // Send Note Off
@@ -1116,7 +1136,7 @@ void noteOff(byte channel, byte pitch, byte velocity) {
   if (buzzer) {
     byte anotherPitch = getHeldNote();
     if (anotherPitch < 128) {
-      tone(TONEPIN, pitches[anotherPitch]);
+      do_tone(anotherPitch);
     } else {
     }
   }
@@ -1220,6 +1240,7 @@ void setupMenu() {
   // Add menu items to Testing page
   menuPageTesting.addMenuItem(menuItemSequencer);
   menuPageTesting.addMenuItem(menuItemVersion);
+  menuPageTesting.addMenuItem(menuItemTones);
   // Specify parent menu page for the other menu pages
   menuPageLayout.setParentMenuPage(menuPageMain);
   menuPageTesting.setParentMenuPage(menuPageMain);
