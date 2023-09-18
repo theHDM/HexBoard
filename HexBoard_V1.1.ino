@@ -1162,6 +1162,10 @@ byte getHeldNote() {
 }
 
 void do_tone(byte pitch) {
+    if (pitch > 127 || pitch < 0) {
+        noTone(TONEPIN);
+        return;
+    }
     if (tones == 12) {
         tone(TONEPIN, pitches[pitch]);
     } else if (tones == 19) {
