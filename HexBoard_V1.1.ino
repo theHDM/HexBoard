@@ -111,13 +111,18 @@ const byte elementCount = columnCount * rowCount;  // The number of elements in 
 
 // Since MIDI only uses 7 bits, we can give greater values special meanings.
 // (see commandPress)
-const int CMDB_1 = 128;
-const int CMDB_2 = 129;
-const int CMDB_3 = 130;
-const int CMDB_4 = 131;
-const int CMDB_5 = 132;
-const int CMDB_6 = 133;
-const int CMDB_7 = 134;
+const int EXTR_1 = 128;
+const int EXTR_2 = 129;
+const int EXTR_3 = 130;
+const int EXTR_4 = 131;
+const int EXTR_5 = 132;
+const int CMDB_1 = 133;
+const int CMDB_2 = 134;
+const int CMDB_3 = 135;
+const int CMDB_4 = 136;
+const int CMDB_5 = 137;
+const int CMDB_6 = 138;
+const int CMDB_7 = 139;
 const int UNUSED = 255;
 
 // LED addresses for CMD buttons.
@@ -218,6 +223,24 @@ const byte ezMajorLayout[elementCount] = { //Testing layout viability - probably
   ROW_FLIP(CMDB_7, 19, 21, 23, 24, 26, 28, 29, 31, 33),
         ROW_FLIP(12, 14, 16, 17, 19, 21, 23, 24, 26, 28)
 };
+// ./makeLayout.py 132 -1 -9
+const byte fullLayout[elementCount] = {
+  ROW_FLIP(CMDB_1, 132, 131, 130, 129, 128, 127, 126, 125, 124),
+        ROW_FLIP(123, 122, 121, 120, 119, 118, 117, 116, 115, 114),
+  ROW_FLIP(CMDB_2, 113, 112, 111, 110, 109, 108, 107, 106, 105),
+        ROW_FLIP(104, 103, 102, 101, 100, 99, 98, 97, 96, 95),
+  ROW_FLIP(CMDB_3, 94, 93, 92, 91, 90, 89, 88, 87, 86),
+        ROW_FLIP(85, 84, 83, 82, 81, 80, 79, 78, 77, 76),
+  ROW_FLIP(CMDB_4, 75, 74, 73, 72, 71, 70, 69, 68, 67),
+        ROW_FLIP(66, 65, 64, 63, 62, 61, 60, 59, 58, 57),
+  ROW_FLIP(CMDB_5, 56, 55, 54, 53, 52, 51, 50, 49, 48),
+        ROW_FLIP(47, 46, 45, 44, 43, 42, 41, 40, 39, 38),
+  ROW_FLIP(CMDB_6, 37, 36, 35, 34, 33, 32, 31, 30, 29),
+        ROW_FLIP(28, 27, 26, 25, 24, 23, 22, 21, 20, 19),
+  ROW_FLIP(CMDB_7, 18, 17, 16, 15, 14, 13, 12, 11, 10),
+        ROW_FLIP(9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+};
+
 const byte* currentLayout = wickiHaydenLayout;
 
 // These are for standard tuning only
@@ -356,10 +379,12 @@ void wickiHayden();  //Forward declarations
 void harmonicTable();
 void gerhard();
 void ezMajor();
+void full();
 GEMItem menuItemWickiHayden("Wicki-Hayden", wickiHayden);
 GEMItem menuItemHarmonicTable("Harmonic Table", harmonicTable);
 GEMItem menuItemGerhard("Gerhard", gerhard);
 GEMItem menuItemEzMajor("EZ Major", ezMajor);
+GEMItem menuItemFull("Full", full);
 
 void setLayoutLEDs();  //Forward declaration
 byte key = 0;
@@ -637,32 +662,53 @@ void diagnosticTest() {
 }
 
 void commandPress(byte command) {
-  if (command == CMDB_1) {
+  if (command == EXTR_1) {
+    MIDI.sendControlChange(85, 127, midiChannel);
+  } else if (command == EXTR_2) {
+    MIDI.sendControlChange(86, 127, midiChannel);
+  } else if (command == EXTR_3) {
+    MIDI.sendControlChange(87, 127, midiChannel);
+  } else if (command == EXTR_4) {
+    MIDI.sendControlChange(88, 127, midiChannel);
+  } else if (command == EXTR_5) {
+    MIDI.sendControlChange(89, 127, midiChannel);
+  } else if (command == CMDB_1) {
     midiVelocity = 100;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn1, strip.ColorHSV(65536 / 12, 255, pressedBrightness));
-  }
-  if (command == CMDB_2) {
+  } else if (command == CMDB_2) {
     midiVelocity = 60;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn2, strip.ColorHSV(65536 / 3, 255, pressedBrightness));
-  }
-  if (command == CMDB_3) {
+  } else if (command == CMDB_3) {
     midiVelocity = 20;
     setCMD_LEDs();
     strip.setPixelColor(cmdBtn3, strip.ColorHSV(65536 / 2, 255, pressedBrightness));
-  }
-  if (command == CMDB_4) {
+  } else if (command == CMDB_4) {
     pitchModToggle = !pitchModToggle;  // Toggles between pitch bend and mod wheel
-  }
-  if (command == CMDB_5) {
-  }
-  if (command == CMDB_6) {
-  }
-  if (command == CMDB_7) {
+  } else if (command == CMDB_5) {
+  } else if (command == CMDB_6) {
+  } else if (command == CMDB_7) {
   }
 }
 void commandRelease(byte command) {
+  switch(command) {
+    case EXTR_1:
+      MIDI.sendControlChange(85, 0, midiChannel);
+      break;
+    case EXTR_2:
+      MIDI.sendControlChange(86, 0, midiChannel);
+      break;
+    case EXTR_3:
+      MIDI.sendControlChange(87, 0, midiChannel);
+      break;
+    case EXTR_4:
+      MIDI.sendControlChange(88, 0, midiChannel);
+      break;
+    case EXTR_5:
+      MIDI.sendControlChange(89, 0, midiChannel);
+      break;
+  }
 }
 
 void pitchBend() {
@@ -1305,6 +1351,7 @@ void setupMenu() {
   // Add menu items to Testing page
   menuPageTesting.addMenuItem(menuItemSequencer);
   menuPageTesting.addMenuItem(menuItemEzMajor);
+  menuPageTesting.addMenuItem(menuItemFull);
   menuPageTesting.addMenuItem(menuItemVersion);
   menuPageTesting.addMenuItem(menuItemTones);
   // Specify parent menu page for the other menu pages
@@ -1334,6 +1381,15 @@ void harmonicTable() {
 }
 void gerhard() {
   currentLayout = gerhardLayout;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void full() {
+  currentLayout = fullLayout;
   setLayoutLEDs();
   if (ModelNumber != 1) {
     u8g2.setDisplayRotation(U8G2_R1);
