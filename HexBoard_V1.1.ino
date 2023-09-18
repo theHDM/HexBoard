@@ -307,6 +307,10 @@ const unsigned int pitches41[128] = {
 880, 895, 910, 926, 942, 958, 974, 991, 1007, 1025, 1042, 1060, 1078, 1096, 1115, 1134, 1153, 1173, 1193, 1213, 1234, 1255, 1276, 1298, 1320, 1343, 1366, 1389, 1413, 1437, 1461, 1486, 1512, 1537, 1564, 1590, 1617, 1645, 1673, 1701, 1730,
 1760, 1790, 1821, 1852, 1883, 1915, 1948, 1981, 2015, 2049, 2084, 2120, 2156, 2193, 2230
 };
+// ./makePitches.py 220 72 18
+const unsigned int pitches72[128] = {
+262, 264, 267, 269, 272, 275, 277, 280, 283, 285, 288, 291, 294, 297, 299, 302, 305, 308, 311, 314, 317, 320, 323, 326, 330, 333, 336, 339, 343, 346, 349, 353, 356, 359, 363, 366, 370, 374, 377, 381, 385, 388, 392, 396, 400, 403, 407, 411, 415, 419, 423, 427, 432, 436, 440, 444, 449, 453, 457, 462, 466, 471, 475, 480, 484, 489, 494, 499, 503, 508, 513, 518, 523, 528, 533, 539, 544, 549, 554, 560, 565, 571, 576, 582, 587, 593, 599, 605, 610, 616, 622, 628, 634, 640, 647, 653, 659, 666, 672, 679, 685, 692, 698, 705, 712, 719, 726, 733, 740, 747, 754, 762, 769, 776, 784, 792, 799, 807, 815, 823, 831, 839, 847, 855, 863, 872, 880, 889
+};
 #define TONEPIN 23
 
 // Global time variables
@@ -489,7 +493,7 @@ void sequencerSetup();  //Forward declaration
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
 
 int tones = 12; // Experimental microtonal support
-SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"19", 19}, {"24", 24}, {"31", 31}, {"41", 41}};
+SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"19", 19}, {"24", 24}, {"31", 31}, {"41", 41}, {"72", 72}};
 GEMSelect selectTones(sizeof(selectTonesOptions)/sizeof(SelectOptionInt), selectTonesOptions);
 GEMItem menuItemTones("Tones:", tones, selectTones);
 
@@ -1222,6 +1226,8 @@ void do_tone(byte pitch) {
         tone(TONEPIN, pitches24[pitch]);
     } else if (tones == 41) {
         tone(TONEPIN, pitches41[pitch]);
+    } else if (tones == 72) {
+        tone(TONEPIN, pitches72[pitch]);
     }
 }
 
