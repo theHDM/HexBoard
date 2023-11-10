@@ -1,5 +1,5 @@
 // Copyright 2022-2023 Jared DeCook and Zach DeCook
-// Licenced under the GNU GPL Version 3.
+// Licensed under the GNU GPL Version 3.
 // Hardware Information:
 // Generic RP2040 running at 133MHz with 16MB of flash
 // https://github.com/earlephilhower/arduino-pico
@@ -46,7 +46,7 @@ int pressedBrightness = 255;
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 int stripBrightness = 130;
 int defaultBrightness = 100;
-int dimBrightness = 36;
+int dimBrightness = 30;
 int pressedBrightness = 255;
 #endif
 
@@ -333,6 +333,7 @@ byte activeButtons[elementCount];               // Array to hold current note bu
 byte previousActiveButtons[elementCount];       // Array to hold previous note button states for comparison
 unsigned long activeButtonsTime[elementCount];  // Array to track last note button activation time for debounce
 byte animationStep[elementCount];               // Array to track reactive lighting steps
+byte cycleNumber = 0;                           // Used for animations that have a fixed cycle
 int animationTime = 0;                          // Used for tracking how long since last lighting update
 // Variables for sequencer mode
 typedef struct {
@@ -477,7 +478,7 @@ GEMSelect selectBrightness(sizeof(selectBrightnessOptions) / sizeof(SelectOption
 GEMItem menuItemBrightness("Brightness:", stripBrightness, selectBrightness, setBrightness);
 
 byte lightMode = 0;
-SelectOptionByte selectLightingOptions[] = { { "Button", 0 }, { "Note", 1 }, { "Octave", 2 }, { "Splash", 3 }, { "Star", 4 } };
+SelectOptionByte selectLightingOptions[] = { { "Button", 0 }, { "Note", 1 }, { "Octave", 2 }, { "Splash", 3 }, { "Star", 4 }, { "Orbit", 5} };
 GEMSelect selectLighting(sizeof(selectLightingOptions) / sizeof(SelectOptionByte), selectLightingOptions);
 GEMItem menuItemLighting("Lighting:", lightMode, selectLighting);
 
@@ -943,6 +944,10 @@ void reactiveLighting() {
   animationTime = animationTime + loopTime;
   if (animationTime >= 33) {                                             // If it has been at least 33 ms (30fps) from last run,
     animationTime = 0;                                                   // reset clock.
+    cycleNumber++;
+    if (cycleNumber > 11) {                                                    // Set position in 6-step cycle
+      cycleNumber = 0;
+    }
     setLayoutLEDs();                                                     // Start by setting the lights to their defaults so we can "paint" on top of it.
     for (int i = 0; i < elementCount; i++) {                             // Scanning through the buttons
       if (isNotePlayable(currentLayout[i]) && currentLayout[i] < 128) {  // (if they are playable)
@@ -961,6 +966,9 @@ void reactiveLighting() {
             break;
           case 4:
             starPattern(i);  // Creates a starburst around the pressed button.
+            break;
+          case 5:
+            orbitPattern(i);  // Creates a starburst around the pressed button.
             break;
           default:  // Just in case something goes wrong?
             buttonPattern(i);
@@ -1105,6 +1113,48 @@ void starPattern(int i) { // This one is far more efficient with no noticeable p
     }
   } else {
     animationStep[i] = 0;  // Stop the animation if the key is released
+  }
+}
+
+void orbitPattern(int i) { // Lights orbiting around the held note.
+  int x1 = i % 10;  // Calculate the coordinates of the pressed button
+  int y1 = i / 10;
+  // Define the relative offsets of neighboring buttons in the pattern
+#if ModelNumber == 1
+  int offsets[][2] = {
+    { 0, 1 },                        // Left
+    { -1, (y1 % 2 == 0) ? 0 : -1 },  // Top Left (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? 1 : 0 },   // Top Right (adjusted based on row parity)
+    { 0, -1 },                       // Right
+    { 1, (y1 % 2 == 0) ? 1 : 0 },    // Bottom Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 0 : -1 }    // Bottom Left (adjusted based on row parity)
+  };
+#elif ModelNumber == 2
+  int offsets[][2] = {
+    { 0, -1 },                       // Left
+    { -1, (y1 % 2 == 0) ? -1 : 0 },  // Top Left (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? 0 : 1 },   // Top Right (adjusted based on row parity)
+    { 0, 1 },                        // Right
+    { 1, (y1 % 2 == 0) ? 0 : 1 },    // Bottom Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? -1 : 0 }    // Bottom Left (adjusted based on row parity)
+  };
+#endif
+
+  if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
+    // Then we light up the pressed button
+    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
+      // Calculate the neighboring button coordinates
+  int y2 = y1 + offsets[cycleNumber/2][0];
+  int x2 = x1 + offsets[cycleNumber/2][1];
+    // Check if the neighboring button is within the layout boundaries
+    if (y2 >= 0 && y2 < 14 && x2 >= 0 && x2 < 10) {
+      // Calculate the index of the neighboring button
+      int neighborIndex = y2 * 10 + x2;
+      if (currentLayout[neighborIndex] < 128) {  // If it's in the playable area...
+       // ...set the color for the neighboring button
+        strip.setPixelColor(neighborIndex, strip.ColorHSV(keyColor(currentLayout[neighborIndex]), 240, pressedBrightness));
+      }
+    }
   }
 }
 
