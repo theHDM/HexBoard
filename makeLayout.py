@@ -22,8 +22,32 @@ def makeLayout(starting, across, downleft):
                 a[row].append(ref+downleft)
     return a
 
+def print_qmk(layout):
+    # Mapping to QMK constants
+    start = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"]
+    start = ["MI_"+x for x in start]
+    arr = start.copy()
+    for n in range(1,6):
+        arr += [x+str(n) for x in start]
+    row = 0
+    print("LAYOUT_inorder(")
+    for Row in layout:
+        if row%2 == 0:
+            n = int(row/2)+1
+            print(f"_______, ", end='')
+        else:
+            print("      ", end='')
+        for entry in Row:
+            print(arr[entry] if entry < len(arr) else 'KC_NO', end=', ')
+        print()
+        row = row + 1
+    print("    ),")
+
 if __name__ == '__main__':
     layout = makeLayout(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]))
+    if len(sys.argv)==5:
+        print_qmk(layout)
+        exit()
     #print(layout)
     row = 0
     for Row in layout:
