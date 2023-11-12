@@ -319,6 +319,14 @@ unsigned long previousTime = 0;  // Used to check speed of the loop in diagnosti
 int loopTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
 int screenTime = 0;              // Used to dim screen after a set time to prolong the lifespan of the OLED
 
+// Arpeggiator variables
+int arpTime = 0;            // Measures time per note
+// TODO: Make this a configurable variable?
+#define ARP_THRESHOLD 100   // Set arp speed (in milliseconds)
+byte curr_pitch = 128;
+// Keep track of whether this note is held or not.
+bool pitchRef[256];
+
 // Pitch bend and mod wheel variables
 int pitchBendNeutral = 0;   // The center position for the pitch bend "wheel." Could be adjusted for global tuning?
 int pitchBendPosition = 0;  // The actual pitch bend variable used for sending MIDI
@@ -482,8 +490,12 @@ SelectOptionByte selectLightingOptions[] = { { "Button", 0 }, { "Note", 1 }, { "
 GEMSelect selectLighting(sizeof(selectLightingOptions) / sizeof(SelectOptionByte), selectLightingOptions);
 GEMItem menuItemLighting("Lighting:", lightMode, selectLighting);
 
-bool buzzer = false;  // For enabling built-in buzzer for sound generation without a computer
-GEMItem menuItemBuzzer("Buzzer:", buzzer);
+int buzzer = 0;  // For enabling built-in buzzer for sound generation without a computer
+#define BUZZER_ARP_UP 2
+#define BUZZER_ARP_DOWN 3
+SelectOptionInt selectBuzzerOptions[] = {{"Off", 0}, {"Mono", 1}, {"Arp Up", BUZZER_ARP_UP}, {"Arp Down", BUZZER_ARP_DOWN}};
+GEMSelect selectBuzzer(sizeof(selectBuzzerOptions)/sizeof(SelectOptionInt), selectBuzzerOptions);
+GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
@@ -612,6 +624,11 @@ void loop() {
   } else {
     // Act on those buttons
     playNotes();
+    if (buzzer == BUZZER_ARP_UP) {
+      arp(1);
+    } else if (buzzer == BUZZER_ARP_DOWN) {
+      arp(-1);
+    }
 
     if (pitchModToggle) {
       // Pitch bend stuff
@@ -1260,8 +1277,30 @@ byte getHeldNote() {
   }
   return 128;
 }
+byte getNextNote(int direction, byte note) {
+  // Find the notes after note in the direction which is held.
+  for (int i = 0; i < 127; i++) {
+    byte target = (128 + note + ((1 + i)*direction)) % 128;
+    if (pitchRef[target]) {
+      return target;
+    }
+  }
+  return 128;
+}
+
+void arp(int direction) {
+    if (currentTime - arpTime > ARP_THRESHOLD){
+        arpTime = millis();
+        byte target = 128;
+        target = getNextNote(direction, curr_pitch);
+        if (target != 128) {
+            do_tone(target);
+        }
+    }
+}
 
 void do_tone(byte pitch) {
+    curr_pitch = pitch;
     if (pitch > 127 || pitch < 0) {
         noTone(TONEPIN);
         return;
@@ -1285,6 +1324,7 @@ void do_tone(byte pitch) {
 // Send Note On
 void noteOn(byte channel, byte pitch, byte velocity) {
   MIDI.sendNoteOn(pitch, velocity, channel);
+  pitchRef[pitch] = true;
   if (diagnostics == 3) {
     Serial.print(pitch);
     Serial.print(", ");
@@ -1299,6 +1339,7 @@ void noteOn(byte channel, byte pitch, byte velocity) {
 // Send Note Off
 void noteOff(byte channel, byte pitch, byte velocity) {
   MIDI.sendNoteOff(pitch, velocity, channel);
+  pitchRef[pitch] = false;
   noTone(TONEPIN);
   if (buzzer) {
     byte anotherPitch = getHeldNote();
