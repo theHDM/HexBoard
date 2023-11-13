@@ -498,8 +498,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = false;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.4.0 ", release, GEM_READONLY);
+boolean release = true;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.5.0 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
