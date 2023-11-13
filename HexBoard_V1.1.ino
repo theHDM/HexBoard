@@ -499,7 +499,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
 boolean release = true;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.5.0 ", release, GEM_READONLY);
+GEMItem menuItemVersion("V0.5.1 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -1143,11 +1143,11 @@ void orbitPattern(int i) { // Lights orbiting around the held note.
 #if ModelNumber == 1
   int offsets[][2] = {
     { 0, 1 },                        // Left
-    { -1, (y1 % 2 == 0) ? 0 : -1 },  // Top Left (adjusted based on row parity)
-    { -1, (y1 % 2 == 0) ? 1 : 0 },   // Top Right (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? 1 : 0 },  // Top Left (adjusted based on row parity)
+    { -1, (y1 % 2 == 0) ? 0 : -1 },   // Top Right (adjusted based on row parity)
     { 0, -1 },                       // Right
-    { 1, (y1 % 2 == 0) ? 1 : 0 },    // Bottom Right (adjusted based on row parity)
-    { 1, (y1 % 2 == 0) ? 0 : -1 }    // Bottom Left (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 0 : -1 },    // Bottom Right (adjusted based on row parity)
+    { 1, (y1 % 2 == 0) ? 1 : 0 }    // Bottom Left (adjusted based on row parity)
   };
 #elif ModelNumber == 2
   int offsets[][2] = {
