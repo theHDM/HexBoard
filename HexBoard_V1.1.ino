@@ -321,8 +321,7 @@ int screenTime = 0;              // Used to dim screen after a set time to prolo
 
 // Arpeggiator variables
 int arpTime = 0;            // Measures time per note
-// TODO: Make this a configurable variable?
-#define ARP_THRESHOLD 100   // Set arp speed (in milliseconds)
+int arpThreshold = 20;   // Set arp speed (in milliseconds)
 byte curr_pitch = 128;
 // Keep track of whether this note is held or not.
 bool pitchRef[256];
@@ -509,6 +508,10 @@ int tones = 12; // Experimental microtonal support
 SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"19", 19}, {"24", 24}, {"31", 31}, {"41", 41}, {"72", 72}};
 GEMSelect selectTones(sizeof(selectTonesOptions)/sizeof(SelectOptionInt), selectTonesOptions);
 GEMItem menuItemTones("Tones:", tones, selectTones);
+
+SelectOptionInt selectArpOptions[] = {{"Fast", 20}, {"Medium", 40}, {"Slow", 80}, {"sloooow", 120}};
+GEMSelect selectArp(sizeof(selectArpOptions)/sizeof(SelectOptionInt), selectArpOptions);
+GEMItem menuItemArp("Arp Speed:", arpThreshold, selectArp);
 
 // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
 byte menuItemHeight = 10;
@@ -985,7 +988,7 @@ void reactiveLighting() {
             starPattern(i);  // Creates a starburst around the pressed button.
             break;
           case 5:
-            orbitPattern(i);  // Creates a starburst around the pressed button.
+            orbitPattern(i);  // Lights orbit around the pressed button.
             break;
           default:  // Just in case something goes wrong?
             buttonPattern(i);
@@ -1289,7 +1292,7 @@ byte getNextNote(int direction, byte note) {
 }
 
 void arp(int direction) {
-    if (currentTime - arpTime > ARP_THRESHOLD){
+    if (currentTime - arpTime > arpThreshold){
         arpTime = millis();
         byte target = 128;
         target = getNextNote(direction, curr_pitch);
@@ -1451,6 +1454,7 @@ void setupMenu() {
   menuPageTesting.addMenuItem(menuItemFull);
   menuPageTesting.addMenuItem(menuItemVersion);
   menuPageTesting.addMenuItem(menuItemTones);
+  menuPageTesting.addMenuItem(menuItemArp);
   // Specify parent menu page for the other menu pages
   menuPageLayout.setParentMenuPage(menuPageMain);
   menuPageTesting.setParentMenuPage(menuPageMain);
