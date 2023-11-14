@@ -11,11 +11,17 @@ or [contact Jared](mailto:jared@shapingthesilence.com) if you're interested in a
 * Jared DeCook has been writing music, developing hardware, and performing as [Shaping The Silence](https://shapingthesilence.com/) for over a decade.
 * Zach DeCook has been listening to music, breaking hardware, and occasionally writing software since the former discovered his exploitable talents.
 
-## HexBoard Arduino firmware
+## HexBoard "Arduino" firmware
 
-The Arduino firmware is the default firmware for the HexBoard (and is what this repository contains).
+The "Arduino" firmware is the default firmware for the HexBoard (and is what this repository contains).
 
 [![Sourcehut Build status](https://builds.sr.ht/~earboxer/HexBoard/commits/.svg)](https://builds.sr.ht/~earboxer/HexBoard/commits/?) Nightly builds are automatically made when a commit is pushed to SourceHut.
+
+Build artifacts are usually also attached to the [tagged releases on sourcehut](https://git.sr.ht/~earboxer/HexBoard/refs), and may be found at https://zachdecook.com/HexBoard/firmware/ for posterity.
+
+The files are in the format `VX_Y_Z-model0.uf2`, where
+* `X_Y_Z` is the version number
+* `0` is the model number ("2" for production model, for sale since 2023. "1" for the 2022 development model with the RP2040 processor board).
 
 ### Building the firmware
 
@@ -56,6 +62,9 @@ make
 Your firmware file will be the uf2 file inside the build directory.
 
 ### Flashing the firmware
+
+Before flashing, you may want to note your current firmware version in case you desire to revert.
+Since Version 0.1.0, the version number for the "Arduino" firmware has been in the Testing menu. The checkbox indicates that the version you have is marked as a 'release' (rather than a nightly build).
 
 1. Unplug the HexBoard from your computer, then plug it in while holding the button by the USB port.
 2. It should appear as a disk in your computer.
