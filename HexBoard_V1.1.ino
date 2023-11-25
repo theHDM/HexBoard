@@ -492,14 +492,14 @@ GEMItem menuItemLighting("Lighting:", lightMode, selectLighting);
 int buzzer = 0;  // For enabling built-in buzzer for sound generation without a computer
 #define BUZZER_ARP_UP 2
 #define BUZZER_ARP_DOWN 3
-SelectOptionInt selectBuzzerOptions[] = {{"Off", 0}, {"Mono", 1}, {"Arp Up", BUZZER_ARP_UP}, {"Arp Down", BUZZER_ARP_DOWN}};
+SelectOptionInt selectBuzzerOptions[] = {{"Off", 0}, {"Mono", 1}, {"Arp Up", BUZZER_ARP_UP}, {"Arp Dwn", BUZZER_ARP_DOWN}};
 GEMSelect selectBuzzer(sizeof(selectBuzzerOptions)/sizeof(SelectOptionInt), selectBuzzerOptions);
 GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
 boolean release = true;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.5.1 ", release, GEM_READONLY);
+GEMItem menuItemVersion("V0.5.2 ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -924,6 +924,7 @@ bool isNotePlayable(byte note) {
 }
 // Used by things not affected by scaleLock
 bool isNoteLit(byte note) {
+  note = (note - key + transpose) % 12;
   if(tones != 12 || (*selectedScale)[note%12]){
     return true;
   }
