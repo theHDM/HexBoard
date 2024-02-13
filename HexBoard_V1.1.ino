@@ -1011,9 +1011,10 @@ uint16_t keyHue(byte note) {
 
 uint32_t keyColor(byte note, byte brightness) {
     // The brightness being variable is a reason not to cache this value.
-    if (colorMode == 0){
+    // TODO: generalize the brightness code.
+    if (colorMode == 0) { // "scale"
         return strip.ColorHSV(keyHue(note), 255, brightness);
-    } else if (colorMode == 1) {
+    } else if (colorMode == 1) { // "tone"
         if (tones == 12) {
             switch (note%tones) {
                 // White keys
@@ -1025,6 +1026,32 @@ uint32_t keyColor(byte note, byte brightness) {
             }
         } else if (tones == 24) {
             return 3;
+        } else if (tones == 41) {
+            switch (note%tones) {
+                // TODO: Fix the brightness of these so contrast is better.
+                //   C        D        E        F        G        A        B
+                case 0: case  7: case 14: case 17: case 24: case 31: case 38:
+                    return strip.ColorHSV(0, 0, brightness);
+                //   C^       D^       E^       F^       G^       A^       B^
+                case 1: case  8: case 15: case 18: case 25: case 32: case 39:
+                    return strip.ColorHSV(39*256, 0.44*256, brightness);
+                //   C+       D+                F+       G+       A+
+                case 2: case  9:          case 19: case 26: case 33:
+                    return strip.ColorHSV(230*256, 0.35*256, brightness);
+                //   Db       Eb                Gb       Ab       Bb
+                case 3: case 10:          case 20: case 27: case 34:
+                    return strip.ColorHSV(166*256, 0.64*256, brightness);
+                //   C#       D#                F#       G#       A#
+                case 4: case 11:          case 21: case 28: case 35:
+                    return strip.ColorHSV(66*256, 0.83*256, brightness);
+                //   Dd       Ed                Gd       Ad       Bd
+                case 5: case 12:          case 22: case 29: case 36:
+                    return strip.ColorHSV(10*256, 0.52*256, brightness);
+                //   Dv       Ev       Fv       Gv       Av       Bv       Cv
+                case 6: case 13: case 16: case 23: case 30: case 37: case 40:
+                    return strip.ColorHSV(198*256, 0.43*256, brightness);
+
+            }
         }
     }
     return 0;
@@ -1338,10 +1365,10 @@ void do_tone(byte pitch) {
         tone(TONEPIN, pitches[pitch]);
     } else if (tones == 19) {
         tone(TONEPIN, pitches19[pitch]);
-    } else if (tones == 31) {
-        tone(TONEPIN, pitches31[pitch]);
     } else if (tones == 24) {
         tone(TONEPIN, pitches24[pitch]);
+    } else if (tones == 31) {
+        tone(TONEPIN, pitches31[pitch]);
     } else if (tones == 41) {
         tone(TONEPIN, pitches41[pitch]);
     } else if (tones == 72) {
