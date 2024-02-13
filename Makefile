@@ -4,13 +4,13 @@ build/build.ino.uf2: build/build.ino
 build/build.ino: HexBoard_V1.1.ino
 	 cp HexBoard_V1.1.ino build/build.ino
 
-/mnt/INFO_UF2.TXT:
+/run/media/*/RPI-RP2/INFO_UF2.TXT:
 	echo "Mounting device"
-	mount /dev/sd*1 /mnt
+	udisksctl mount -b /dev/disk/by-label/RPI-RP2
 
-install: build/build.ino.uf2 /mnt/INFO_UF2.TXT
+install: build/build.ino.uf2 /run/media/*/RPI-RP2/INFO_UF2.TXT
 	echo "Trying to copy into mounted device"
-	cp build/build.ino.uf2 /mnt/
+	cp build/build.ino.uf2 /run/media/*/RPI-RP2/
 	echo "Installed."
 	sleep 7
 	echo "Rebooted."

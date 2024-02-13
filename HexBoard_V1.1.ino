@@ -489,6 +489,11 @@ SelectOptionByte selectLightingOptions[] = { { "Button", 0 }, { "Note", 1 }, { "
 GEMSelect selectLighting(sizeof(selectLightingOptions) / sizeof(SelectOptionByte), selectLightingOptions);
 GEMItem menuItemLighting("Lighting:", lightMode, selectLighting);
 
+byte colorMode = 0;
+SelectOptionByte selectColorOptions[] = { { "Scale", 0 }, { "Tone", 1 }};
+GEMSelect selectColor(sizeof(selectColorOptions) / sizeof(SelectOptionByte), selectColorOptions);
+GEMItem menuItemColor("Color:", colorMode, selectColor);
+
 int buzzer = 0;  // For enabling built-in buzzer for sound generation without a computer
 #define BUZZER_ARP_UP 2
 #define BUZZER_ARP_DOWN 3
@@ -498,8 +503,8 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
-boolean release = true;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.5.2 ", release, GEM_READONLY);
+boolean release = false;  // Whether this is a release or not
+GEMItem menuItemVersion("V0.6.x ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -940,7 +945,7 @@ void playNotes() {
       {
         if (currentLayout[i] < 128) {
           if (isNotePlayable(currentLayout[i])) {  // If note is within the selected scale, light up and play
-            //strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, pressedBrightness));
+            //strip.setPixelColor(i, keyColor(currentLayout[i], pressedBrightness));
             noteOn(midiChannel, (currentLayout[i] + transpose) % 128, midiVelocity);
           }
         } else {
@@ -999,16 +1004,36 @@ void reactiveLighting() {
     }
   }
 }
-
-int keyColor(byte note) {
+uint16_t keyHue(byte note) {
     // 60072
     return ((note - key + transpose) % tones) * ((65536)/tones);
+}
+
+uint32_t keyColor(byte note, byte brightness) {
+    // The brightness being variable is a reason not to cache this value.
+    if (colorMode == 0){
+        return strip.ColorHSV(keyHue(note), 255, brightness);
+    } else if (colorMode == 1) {
+        if (tones == 12) {
+            switch (note%tones) {
+                // White keys
+                case 0: case 2: case 4: case 5: case 7: case 9: case 11:
+                    return strip.ColorHSV(0, 0, brightness);
+                // Black keys
+                case 1: case 3: case 6: case 8: case 10:
+                    return strip.ColorHSV(5461, 128, brightness);
+            }
+        } else if (tones == 24) {
+            return 3;
+        }
+    }
+    return 0;
 }
 
 void buttonPattern(int i) {
   if (activeButtons[i] == 1) {  // If it's an active button...
     // ...then we light it up!
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i],pressedBrightness));
   }
 }
 
@@ -1018,7 +1043,7 @@ void notePattern(int i) {
       if (currentLayout[m] < 128) {                  // Only runs on lights in the playable area
         if (currentLayout[m] == currentLayout[i]) {  // If it's the same note as the active button...
           // ...then we light it up!
-          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
+          strip.setPixelColor(m, keyColor(currentLayout[m], pressedBrightness));
         }
       }
     }
@@ -1031,7 +1056,7 @@ void octavePattern(int i) {
       if (currentLayout[m] < 128) {                            // Only runs on lights in the playable area
         if (currentLayout[m] % tones == currentLayout[i] % tones) {  // If it's in different octaves as the active button...
           // ...then we light it up!
-          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
+          strip.setPixelColor(m, keyColor(currentLayout[m], pressedBrightness));
         }
       }
     }
@@ -1061,16 +1086,16 @@ void splashPattern(int i) {
         // If the light is the correct distance from the button...
         if (max(abs(dy), abs(dx) + floor(abs(dy) / 2) + penalty) == animationStep[i]) {
           // light it up!
-          strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, pressedBrightness));
+          strip.setPixelColor(m, keyColor(currentLayout[m], pressedBrightness));
           // or we could have it fade as it moves
-          //strip.setPixelColor(m, strip.ColorHSV(keyColor(currentLayout[m]), 240, (pressedBrightness - animationStep[i]*12)));
+          //strip.setPixelColor(m, keyColor(currentLayout[m], (pressedBrightness - animationStep[i]*12)));
         }
       }
     }
   }
   if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
     // Then we light up the pressed button
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i], pressedBrightness));
     if (animationStep[i] < 16) {
       animationStep[i]++;  // Increment the animation to the next step for next time.
     }
@@ -1119,7 +1144,7 @@ void starPattern(int i) { // This one is far more efficient with no noticeable p
         int neighborIndex = y2 * 10 + x2;
         if (currentLayout[neighborIndex] < 128) {  // If it's in the playable area...
           // ...set the color for the neighboring button
-          strip.setPixelColor(neighborIndex, strip.ColorHSV(keyColor(currentLayout[neighborIndex]), 240, pressedBrightness));
+          strip.setPixelColor(neighborIndex, keyColor(currentLayout[neighborIndex], pressedBrightness));
         }
       }
     }
@@ -1128,7 +1153,7 @@ void starPattern(int i) { // This one is far more efficient with no noticeable p
 
   if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
     // Then we light up the pressed button
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i], pressedBrightness));
     if (animationStep[i] < 16) {
       animationStep[i]++;  // Increment the animation to the next step for next time.
     }
@@ -1163,7 +1188,7 @@ void orbitPattern(int i) { // Lights orbiting around the held note.
 
   if (activeButtons[i] == 1) {  // Check to see if the it's an active button.
     // Then we light up the pressed button
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 240, pressedBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i], pressedBrightness));
       // Calculate the neighboring button coordinates
   int y2 = y1 + offsets[cycleNumber/2][0];
   int x2 = x1 + offsets[cycleNumber/2][1];
@@ -1173,7 +1198,7 @@ void orbitPattern(int i) { // Lights orbiting around the held note.
       int neighborIndex = y2 * 10 + x2;
       if (currentLayout[neighborIndex] < 128) {  // If it's in the playable area...
        // ...set the color for the neighboring button
-        strip.setPixelColor(neighborIndex, strip.ColorHSV(keyColor(currentLayout[neighborIndex]), 240, pressedBrightness));
+        strip.setPixelColor(neighborIndex, keyColor(currentLayout[neighborIndex], pressedBrightness));
       }
     }
   }
@@ -1371,14 +1396,14 @@ void setLayoutLEDs() {
 }
 void setLayoutLED(int i) {
   if (scaleLock) {
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, 0));
+    strip.setPixelColor(i, keyColor(currentLayout[i], 0));
   } else {
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, dimBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i], dimBrightness));
   }
 
   // Scale highlighting
   if (isNoteLit(currentLayout[i])) {
-    strip.setPixelColor(i, strip.ColorHSV(keyColor(currentLayout[i]), 255, defaultBrightness));
+    strip.setPixelColor(i, keyColor(currentLayout[i], defaultBrightness));
   }
 }
 
@@ -1443,6 +1468,7 @@ void setupMenu() {
   menuPageMain.addMenuItem(menuItemModSpeed);
   menuPageMain.addMenuItem(menuItemBrightness);
   menuPageMain.addMenuItem(menuItemLighting);
+  menuPageMain.addMenuItem(menuItemColor);
   menuPageMain.addMenuItem(menuItemBuzzer);
   menuPageMain.addMenuItem(menuItemTesting);
   // Add menu items to Layout Select page
