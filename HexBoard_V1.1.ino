@@ -116,13 +116,14 @@ const int EXTR_2 = 129;
 const int EXTR_3 = 130;
 const int EXTR_4 = 131;
 const int EXTR_5 = 132;
-const int CMDB_1 = 133;
-const int CMDB_2 = 134;
-const int CMDB_3 = 135;
-const int CMDB_4 = 136;
-const int CMDB_5 = 137;
-const int CMDB_6 = 138;
-const int CMDB_7 = 139;
+// start CMDB in a range that won't interfere with layouts.
+const int CMDB_1 = 201;
+const int CMDB_2 = 202;
+const int CMDB_3 = 203;
+const int CMDB_4 = 204;
+const int CMDB_5 = 205;
+const int CMDB_6 = 206;
+const int CMDB_7 = 207;
 const int UNUSED = 255;
 
 // LED addresses for CMD buttons.
@@ -239,6 +240,60 @@ const byte fullLayout[elementCount] = {
         ROW_FLIP(28, 27, 26, 25, 24, 23, 22, 21, 20, 19),
   ROW_FLIP(CMDB_7, 18, 17, 16, 15, 14, 13, 12, 11, 10),
         ROW_FLIP(9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+};
+
+// ./makeLayout.py 99 -4 -3
+const byte fourtyone1[elementCount] = {
+  ROW_FLIP(CMDB_1, 99, 95, 91, 87, 83, 79, 75, 71, 67),
+        ROW_FLIP(96, 92, 88, 84, 80, 76, 72, 68, 64, 60),
+  ROW_FLIP(CMDB_2, 89, 85, 81, 77, 73, 69, 65, 61, 57),
+        ROW_FLIP(86, 82, 78, 74, 70, 66, 62, 58, 54, 50),
+  ROW_FLIP(CMDB_3, 79, 75, 71, 67, 63, 59, 55, 51, 47),
+        ROW_FLIP(76, 72, 68, 64, 60, 56, 52, 48, 44, 40),
+  ROW_FLIP(CMDB_4, 69, 65, 61, 57, 53, 49, 45, 41, 37),
+        ROW_FLIP(66, 62, 58, 54, 50, 46, 42, 38, 34, 30),
+  ROW_FLIP(CMDB_5, 59, 55, 51, 47, 43, 39, 35, 31, 27),
+        ROW_FLIP(56, 52, 48, 44, 40, 36, 32, 28, 24, 20),
+  ROW_FLIP(CMDB_6, 49, 45, 41, 37, 33, 29, 25, 21, 17),
+        ROW_FLIP(46, 42, 38, 34, 30, 26, 22, 18, 14, 10),
+  ROW_FLIP(CMDB_7, 39, 35, 31, 27, 23, 19, 15, 11, 7),
+        ROW_FLIP(36, 32, 28, 24, 20, 16, 12, 8, 4, 0)
+};
+
+// ./makeLayout.py 138 3 -10
+const byte fourtyone2[elementCount] = {
+  ROW_FLIP(CMDB_1, 138, 141, 144, 147, 150, 153, 156, 159, 162),
+        ROW_FLIP(128, 131, 134, 137, 140, 143, 146, 149, 152, 155),
+  ROW_FLIP(CMDB_2, 121, 124, 127, 130, 133, 136, 139, 142, 145),
+        ROW_FLIP(111, 114, 117, 120, 123, 126, 129, 132, 135, 138),
+  ROW_FLIP(CMDB_3, 104, 107, 110, 113, 116, 119, 122, 125, 128),
+        ROW_FLIP(94, 97, 100, 103, 106, 109, 112, 115, 118, 121),
+  ROW_FLIP(CMDB_4, 87, 90, 93, 96, 99, 102, 105, 108, 111),
+        ROW_FLIP(77, 80, 83, 86, 89, 92, 95, 98, 101, 104),
+  ROW_FLIP(CMDB_5, 70, 73, 76, 79, 82, 85, 88, 91, 94),
+        ROW_FLIP(60, 63, 66, 69, 72, 75, 78, 81, 84, 87),
+  ROW_FLIP(CMDB_6, 53, 56, 59, 62, 65, 68, 71, 74, 77),
+        ROW_FLIP(43, 46, 49, 52, 55, 58, 61, 64, 67, 70),
+  ROW_FLIP(CMDB_7, 36, 39, 42, 45, 48, 51, 54, 57, 60),
+        ROW_FLIP(26, 29, 32, 35, 38, 41, 44, 47, 50, 53)
+};
+
+// ./makeLayout.py 152 -1 -8
+const byte fourtyone3[elementCount] = {
+  ROW_FLIP(CMDB_1, 152, 151, 150, 149, 148, 147, 146, 145, 144),
+        ROW_FLIP(144, 143, 142, 141, 140, 139, 138, 137, 136, 135),
+  ROW_FLIP(CMDB_2, 135, 134, 133, 132, 131, 130, 129, 128, 127),
+        ROW_FLIP(127, 126, 125, 124, 123, 122, 121, 120, 119, 118),
+  ROW_FLIP(CMDB_3, 118, 117, 116, 115, 114, 113, 112, 111, 110),
+        ROW_FLIP(110, 109, 108, 107, 106, 105, 104, 103, 102, 101),
+  ROW_FLIP(CMDB_4, 101, 100, 99, 98, 97, 96, 95, 94, 93),
+        ROW_FLIP(93, 92, 91, 90, 89, 88, 87, 86, 85, 84),
+  ROW_FLIP(CMDB_5, 84, 83, 82, 81, 80, 79, 78, 77, 76),
+        ROW_FLIP(76, 75, 74, 73, 72, 71, 70, 69, 68, 67),
+  ROW_FLIP(CMDB_6, 67, 66, 65, 64, 63, 62, 61, 60, 59),
+        ROW_FLIP(59, 58, 57, 56, 55, 54, 53, 52, 51, 50),
+  ROW_FLIP(CMDB_7, 50, 49, 48, 47, 46, 45, 44, 43, 42),
+        ROW_FLIP(42, 41, 40, 39, 38, 37, 36, 35, 34, 33)
 };
 
 const byte* currentLayout = wickiHaydenLayout;
@@ -392,11 +447,17 @@ void harmonicTable();
 void gerhard();
 void ezMajor();
 void full();
+void fortyone1();
+void fortyone2();
+void fortyone3();
 GEMItem menuItemWickiHayden("Wicki-Hayden", wickiHayden);
 GEMItem menuItemHarmonicTable("Harmonic Table", harmonicTable);
 GEMItem menuItemGerhard("Gerhard", gerhard);
 GEMItem menuItemEzMajor("EZ Major", ezMajor);
 GEMItem menuItemFull("Full", full);
+GEMItem menuItem411("41-1", fortyone1);
+GEMItem menuItem412("41-2", fortyone2);
+GEMItem menuItem413("41-3", fortyone3);
 
 void setLayoutLEDs();  //Forward declaration
 byte key = 0;
@@ -504,7 +565,7 @@ GEMItem menuItemBuzzer("Buzzer:", buzzer, selectBuzzer);
 // For use when testing out unfinished features
 GEMItem menuItemTesting("Testing", menuPageTesting);
 boolean release = false;  // Whether this is a release or not
-GEMItem menuItemVersion("V0.6.x ", release, GEM_READONLY);
+GEMItem menuItemVersion("V0.6.y ", release, GEM_READONLY);
 void sequencerSetup();  //Forward declaration
 // For enabling basic sequencer mode - not complete
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
@@ -692,6 +753,12 @@ void diagnosticTest() {
 }
 
 void commandPress(byte command) {
+  // 14,15 undefined
+  // 20-31 undefined
+  // 35, 41 undefined
+  // 46-63 undefined
+  //84-90 undefined
+  // 102-119 undefined
   if (command == EXTR_1) {
     MIDI.sendControlChange(85, 127, midiChannel);
   } else if (command == EXTR_2) {
@@ -1506,6 +1573,9 @@ void setupMenu() {
   menuPageTesting.addMenuItem(menuItemSequencer);
   menuPageTesting.addMenuItem(menuItemEzMajor);
   menuPageTesting.addMenuItem(menuItemFull);
+  menuPageTesting.addMenuItem(menuItem411);
+  menuPageTesting.addMenuItem(menuItem412);
+  menuPageTesting.addMenuItem(menuItem413);
   menuPageTesting.addMenuItem(menuItemVersion);
   menuPageTesting.addMenuItem(menuItemTones);
   menuPageTesting.addMenuItem(menuItemArp);
@@ -1545,6 +1615,33 @@ void gerhard() {
 }
 void full() {
   currentLayout = fullLayout;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void fortyone1() {
+  currentLayout = fourtyone1;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void fortyone2() {
+  currentLayout = fourtyone2;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void fortyone3() {
+  currentLayout = fourtyone3;
   setLayoutLEDs();
   if (ModelNumber != 1) {
     u8g2.setDisplayRotation(U8G2_R1);
