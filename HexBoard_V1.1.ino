@@ -46,7 +46,7 @@ int pressedBrightness = 255;
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 int stripBrightness = 130;
 int defaultBrightness = 100;
-int dimBrightness = 30;
+int dimBrightness = 26;
 int pressedBrightness = 255;
 #endif
 
@@ -466,22 +466,33 @@ GEMSelect selectKey(sizeof(selectKeyOptions) / sizeof(SelectOptionByte), selectK
 GEMItem menuItemKey("Key:", key, selectKey, setLayoutLEDs);
 
 byte scale = 0;
-SelectOptionByte selectScaleOptions[] = { { "ALL", 0 }, { "Major", 1 }, { "HarMin", 2 }, { "MelMin", 3 }, { "NatMin", 4 }, { "PentMaj", 5 }, { "PentMin", 6 }, { "Blues", 7 }, { "NONE", 8 }, { "NONE", 9 }, { "NONE", 10 }, { "NONE", 11 } };
+SelectOptionByte selectScaleOptions[] = {
+  { "ALL", 0 }, { "Major", 1 }, { "HarMin", 2 }, { "MelMin", 3 }, { "NatMin", 4 }, { "PentMaj", 5 },
+  { "PentMin", 6 }, { "Blues", 7 }, { "DoubHar", 8 }, { "Phrygia", 9 }, { "PhryDom", 10 }, { "Dorian", 11 },
+  { "Lydian", 12 }, { "Mixolyd", 13 }, { "Locrian", 14 }, { "NONE", 15 }
+  };
 GEMSelect selectScale(sizeof(selectScaleOptions) / sizeof(SelectOptionByte), selectScaleOptions);
 GEMItem menuItemScale("Scale:", scale, selectScale, applySelectedScale);
 
 const bool (*selectedScale)[12];
 // Scale arrays of boolean (for O(1) access instead of O(12/2))
-//                                   0 1 2 3 4 5 6 7 8 9 X E
-const bool noneScale[12]          = {0,0,0,0,0,0,0,0,0,0,0,0};
-const bool chromaticScale[12]     = {1,1,1,1,1,1,1,1,1,1,1,1};
-const bool majorScale[12]         = {1,0,1,0,1,1,0,1,0,1,0,1};
-const bool harmonicMinorScale[12] = {1,0,1,1,0,1,0,1,1,0,0,1};
-const bool melodicMinorScale[12]  = {1,0,1,1,0,1,0,1,0,1,0,1};
-const bool naturalMinorScale[12]  = {1,0,1,1,0,1,0,1,1,0,1,0};
-const bool pentatonicMajorScale[12]={1,0,1,0,1,0,0,1,0,1,0,0};
-const bool pentatonicMinorScale[12]={1,0,0,1,0,1,0,1,0,0,1,0};
-const bool bluesScale[12]         = {1,0,0,1,0,1,1,1,0,0,1,0};
+//                                     0 1 2 3 4 5 6 7 8 9 X E
+const bool noneScale[12]            = {0,0,0,0,0,0,0,0,0,0,0,0};
+const bool chromaticScale[12]       = {1,1,1,1,1,1,1,1,1,1,1,1};
+const bool majorScale[12]           = {1,0,1,0,1,1,0,1,0,1,0,1};
+const bool harmonicMinorScale[12]   = {1,0,1,1,0,1,0,1,1,0,0,1};
+const bool melodicMinorScale[12]    = {1,0,1,1,0,1,0,1,0,1,0,1};
+const bool naturalMinorScale[12]    = {1,0,1,1,0,1,0,1,1,0,1,0};
+const bool pentatonicMajorScale[12] = {1,0,1,0,1,0,0,1,0,1,0,0};
+const bool pentatonicMinorScale[12] = {1,0,0,1,0,1,0,1,0,0,1,0};
+const bool bluesScale[12]           = {1,0,0,1,0,1,1,1,0,0,1,0};
+const bool doubleHarmonicScale[12]  = {1,1,0,0,1,1,0,1,1,0,0,1};
+const bool phrygianScale[12]        = {1,1,0,1,0,1,0,1,1,0,1,0};
+const bool phrygianDominantScale[12]= {1,1,0,0,1,1,0,1,1,0,1,0};
+const bool dorianScale[12]          = {1,0,1,1,0,1,0,1,0,1,1,0};
+const bool lydianScale[12]          = {1,0,1,0,1,0,1,1,0,1,0,1};
+const bool mixolydianScale[12]      = {1,0,1,0,1,1,0,1,0,1,1,0};
+const bool locrianScale[12]         = {1,1,0,1,0,1,1,0,1,0,1,0};
 
 // Function to apply the selected scale
 void applySelectedScale() {
@@ -509,6 +520,27 @@ void applySelectedScale() {
       break;
     case 7:  // Blues scale
       selectedScale = &bluesScale;
+      break;
+    case 8:  // Double Harmonic scale
+      selectedScale = &doubleHarmonicScale;
+      break;
+    case 9:  // Phrygian scale
+      selectedScale = &phrygianScale;
+      break;
+    case 10:  // Phrygian Dominant scale
+      selectedScale = &phrygianDominantScale;
+      break;
+    case 11:  // Dorian scale
+      selectedScale = &dorianScale;
+      break;
+    case 12:  // Lydian scale
+      selectedScale = &lydianScale;
+      break;
+    case 13:  // Mixolydian scale
+      selectedScale = &mixolydianScale;
+      break;
+    case 14:  // Locrian scale
+      selectedScale = &locrianScale;
       break;
     default: // Dim all LEDs
       selectedScale = &noneScale;
