@@ -69,8 +69,8 @@ U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/U8X8_PIN_NONE);
 #endif
 int screenBrightness = stripBrightness / 2;
 
-//
-// Button matrix and LED locations
+// Button matrix and LED locations, Dev Unit Only.
+// Prod unit has matrix columns swapped and LEDs in a sane order (see ROW_FLIP macro).
 // Portrait orientation top view:
 //            9   8   7   6   5   4   3   2   1
 //         20  19  18  17  16  15  14  13  12  11
@@ -111,22 +111,22 @@ const byte elementCount = columnCount * rowCount;  // The number of elements in 
 
 // Since MIDI only uses 7 bits, we can give greater values special meanings.
 // (see commandPress)
-const int EXTR_1 = 128;
-const int EXTR_2 = 129;
-const int EXTR_3 = 130;
-const int EXTR_4 = 131;
-const int EXTR_5 = 132;
+const byte EXTR_1 = 128;
+const byte EXTR_2 = 129;
+const byte EXTR_3 = 130;
+const byte EXTR_4 = 131;
+const byte EXTR_5 = 132;
 // start CMDB in a range that won't interfere with layouts.
-const int CMDB_1 = 201;
-const int CMDB_2 = 202;
-const int CMDB_3 = 203;
-const int CMDB_4 = 204;
-const int CMDB_5 = 205;
-const int CMDB_6 = 206;
-const int CMDB_7 = 207;
-const int UNUSED = 255;
+const byte CMDB_1 = 201;
+const byte CMDB_2 = 202;
+const byte CMDB_3 = 203;
+const byte CMDB_4 = 204;
+const byte CMDB_5 = 205;
+const byte CMDB_6 = 206;
+const byte CMDB_7 = 207;
+const byte UNUSED = 255;
 
-// LED addresses for CMD buttons.
+// LED addresses for CMD buttons. (consequencely, also the button address too)
 #if ModelNumber == 1
 const byte cmdBtn1 = 10 - 1;
 const byte cmdBtn2 = 30 - 1;
@@ -260,6 +260,7 @@ const byte fourtyone1[elementCount] = {
         ROW_FLIP(36, 32, 28, 24, 20, 16, 12, 8, 4, 0)
 };
 
+// TODO: Don't make this go outside of the normal range
 // ./makeLayout.py 138 3 -10
 const byte fourtyone2[elementCount] = {
   ROW_FLIP(CMDB_1, 138, 141, 144, 147, 150, 153, 156, 159, 162),
@@ -278,6 +279,7 @@ const byte fourtyone2[elementCount] = {
         ROW_FLIP(26, 29, 32, 35, 38, 41, 44, 47, 50, 53)
 };
 
+// TODO: Don't make this go outside of the normal range
 // ./makeLayout.py 152 -1 -8
 const byte fourtyone3[elementCount] = {
   ROW_FLIP(CMDB_1, 152, 151, 150, 149, 148, 147, 146, 145, 144),
@@ -374,7 +376,7 @@ unsigned long previousTime = 0;  // Used to check speed of the loop in diagnosti
 int loopTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
 int screenTime = 0;              // Used to dim screen after a set time to prolong the lifespan of the OLED
 
-// Arpeggiator variables
+// Tone and Arpeggiator variables
 int arpTime = 0;            // Measures time per note
 int arpThreshold = 20;   // Set arp speed (in milliseconds)
 byte curr_pitch = 128;
@@ -397,12 +399,18 @@ unsigned long activeButtonsTime[elementCount];  // Array to track last note butt
 byte animationStep[elementCount];               // Array to track reactive lighting steps
 byte cycleNumber = 0;                           // Used for animations that have a fixed cycle
 int animationTime = 0;                          // Used for tracking how long since last lighting update
+
 // Variables for sequencer mode
+// Sequencer mode probably needs some love before it will be useful/usable.
+// The device is held vertically, and two rows create a "lane".
+// the first 8 buttons from each row are the steps (giving you 4 measures with quarter-note precision)
+// The extra 3 (4?) buttons are for bank switching, muting, and solo-ing
 typedef struct {
+  // The first 16 are for bank 0, and the second 16 are for bank 1.
   bool steps[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   bool bank = 0;
   int state = 0;  // TODO: change to enum: normal, mute, solo, mute&solo
-  int instrument = 0;
+  int instrument = 0; // What midi note this lane will send to the computer.
 } Lane;
 #define STATE_MUTE 1
 #define STATE_SOLO 2
@@ -603,6 +611,7 @@ void sequencerSetup();  //Forward declaration
 GEMItem menuItemSequencer("Sequencer:", sequencerMode, sequencerSetup);
 
 int tones = 12; // Experimental microtonal support
+// TODO: consider adding 17, 22, 53
 SelectOptionInt selectTonesOptions[] = {{"12", 12}, {"19", 19}, {"24", 24}, {"31", 31}, {"41", 41}, {"72", 72}};
 GEMSelect selectTones(sizeof(selectTonesOptions)/sizeof(SelectOptionInt), selectTonesOptions);
 GEMItem menuItemTones("Tones:", tones, selectTones);
@@ -628,6 +637,7 @@ byte midiVelocity = 100;  // Default velocity
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 void setup() {
+  // sequencer mode midi instruments for each "lane".
   lanes[0].instrument = 36;  // Bass Drum 1
   lanes[1].instrument = 40;  // Electric Snare
   lanes[2].instrument = 46;  // Open Hi-Hat
