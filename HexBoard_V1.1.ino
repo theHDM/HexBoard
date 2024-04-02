@@ -207,6 +207,23 @@ const byte gerhardLayout[elementCount] = {
   ROW_FLIP(CMDB_7, 44, 43, 42, 41, 40, 39, 38, 37, 36),
         ROW_FLIP(41, 40, 39, 38, 37, 36, 35, 34, 33, 32)
 };
+// ./makeLayout.py 74 -1 -1
+const byte bosanquetWilsonLayout[elementCount] = {
+  ROW_FLIP(CMDB_1, 74, 73, 72, 71, 70, 69, 68, 67, 66),
+        ROW_FLIP(73, 72, 71, 70, 69, 68, 67, 66, 65, 64),
+  ROW_FLIP(CMDB_2, 71, 70, 69, 68, 67, 66, 65, 64, 63),
+        ROW_FLIP(70, 69, 68, 67, 66, 65, 64, 63, 62, 61),
+  ROW_FLIP(CMDB_3, 68, 67, 66, 65, 64, 63, 62, 61, 60),
+        ROW_FLIP(67, 66, 65, 64, 63, 62, 61, 60, 59, 58),
+  ROW_FLIP(CMDB_4, 65, 64, 63, 62, 61, 60, 59, 58, 57),
+        ROW_FLIP(64, 63, 62, 61, 60, 59, 58, 57, 56, 55),
+  ROW_FLIP(CMDB_5, 62, 61, 60, 59, 58, 57, 56, 55, 54),
+        ROW_FLIP(61, 60, 59, 58, 57, 56, 55, 54, 53, 52),
+  ROW_FLIP(CMDB_6, 59, 58, 57, 56, 55, 54, 53, 52, 51),
+        ROW_FLIP(58, 57, 56, 55, 54, 53, 52, 51, 50, 49),
+  ROW_FLIP(CMDB_7, 56, 55, 54, 53, 52, 51, 50, 49, 48),
+        ROW_FLIP(55, 54, 53, 52, 51, 50, 49, 48, 47, 46)
+};
 // This layout can't be created by makeLayout.py
 const byte ezMajorLayout[elementCount] = { //Testing layout viability - probably will make this generative so we can easily add scales once figured out
   ROW_FLIP(CMDB_1, 91, 93, 95, 96, 98, 100, 101, 103, 105),
@@ -453,6 +470,7 @@ GEMItem menuItemLayout("Layout", menuPageLayout);
 void wickiHayden();  //Forward declarations
 void harmonicTable();
 void gerhard();
+void bosanquetWilson();
 void ezMajor();
 void full();
 void fortyone1();
@@ -461,6 +479,7 @@ void fortyone3();
 GEMItem menuItemWickiHayden("Wicki-Hayden", wickiHayden);
 GEMItem menuItemHarmonicTable("Harmonic Table", harmonicTable);
 GEMItem menuItemGerhard("Gerhard", gerhard);
+GEMItem menuItemBosanquetWilson("Bosanquet-Wilson", bosanquetWilson);
 GEMItem menuItemEzMajor("EZ Major", ezMajor);
 GEMItem menuItemFull("Full", full);
 GEMItem menuItem411("41-1", fortyone1);
@@ -1611,6 +1630,7 @@ void setupMenu() {
   menuPageLayout.addMenuItem(menuItemWickiHayden);
   menuPageLayout.addMenuItem(menuItemHarmonicTable);
   menuPageLayout.addMenuItem(menuItemGerhard);
+  menuPageLayout.addMenuItem(menuItemBosanquetWilson);
   // Add menu items to Testing page
   menuPageTesting.addMenuItem(menuItemSequencer);
   menuPageTesting.addMenuItem(menuItemEzMajor);
@@ -1648,6 +1668,15 @@ void harmonicTable() {
 }
 void gerhard() {
   currentLayout = gerhardLayout;
+  setLayoutLEDs();
+  if (ModelNumber != 1) {
+    u8g2.setDisplayRotation(U8G2_R1);
+  }
+  menu.setMenuPageCurrent(menuPageMain);
+  menu.drawMenu();
+}
+void bosanquetWilson() {
+  currentLayout = bosanquetWilsonLayout;
   setLayoutLEDs();
   if (ModelNumber != 1) {
     u8g2.setDisplayRotation(U8G2_R1);
