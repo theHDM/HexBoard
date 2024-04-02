@@ -10,8 +10,7 @@
   // list of things remaining to do:
   // -- program the wheel -- OK!
   // -- put back the animations -- OK!
-  // -- test MPE working on iPad garageband -- works on pianoteq
-without MPE; need to get powered connection to iOS.
+  // -- test MPE working on iPad garageband -- works on pianoteq without MPE; need to get powered connection to iOS.
   // -- volume control test on buzzer
   // -- save and load presets
   // -- sequencer restore
@@ -20,17 +19,13 @@ without MPE; need to get powered connection to iOS.
   #include <Arduino.h>
   #include <Wire.h>
   #include <LittleFS.h>
-  #include <queue>              // std::queue construct to store open
-channels in microtonal mode
+  #include <queue>              // std::queue construct to store open channels in microtonal mode
   const byte diagnostics = 1;
 // ====== initialize timers
 
-  uint32_t runTime = 0;                 // Program loop consistent
-variable for time in milliseconds since power on
-  uint32_t lapTime = 0;                 // Used to keep track of how
-long each loop takes. Useful for rate-limiting.
-  uint32_t loopTime = 0;               // Used to check speed of the
-loop in diagnostics mode 4
+  uint32_t runTime = 0;                 // Program loop consistent variable for time in milliseconds since power on
+  uint32_t lapTime = 0;                 // Used to keep track of how long each loop takes. Useful for rate-limiting.
+  uint32_t loopTime = 0;               // Used to check speed of the loop in diagnostics mode 4
 
 // ====== initialize SDA and SCL pins for hardware I/O
 
@@ -44,14 +39,10 @@ loop in diagnostics mode 4
   Adafruit_USBD_MIDI usb_midi;
   MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
   float concertA = 440.0;               // tuning of A4 in Hz
-  byte MPE = 0; // microtonal mode. if zero then attempt to
-self-manage multiple channels.
-              // if one then on certain synths that are MPE compatible
-will send in that mode.
-  int16_t channelBend[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-0, 0, 0 };  // what's the current note bend on this channel
-  byte channelPoly[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-0, 0 };      // how many notes are playing on this channel
+  byte MPE = 0; // microtonal mode. if zero then attempt to self-manage multiple channels.
+              // if one then on certain synths that are MPE compatible will send in that mode.
+  int16_t channelBend[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // what's the current note bend on this channel
+  byte channelPoly[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };      // how many notes are playing on this channel
   std::queue<byte> openChannelQueue;
   const byte defaultPBRange = 2;
 
@@ -59,19 +50,15 @@ will send in that mode.
 
   #include <Adafruit_NeoPixel.h>
   const byte multiplexPins[] = { 4, 5, 2, 3 };  // m1p, m2p, m4p, m8p
-  const byte rowCount = 14;                     // The number of rows
-in the matrix
+  const byte rowCount = 14;                     // The number of rows in the matrix
   const byte columnPins[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-  const byte colCount = sizeof(columnPins);  // The number of columns
-in the matrix
-  const byte hexCount = colCount * rowCount;  // The number of
-elements in the matrix
+  const byte colCount = sizeof(columnPins);  // The number of columns in the matrix
+  const byte hexCount = colCount * rowCount;  // The number of elements in the matrix
   const byte LEDPin = 22;
   Adafruit_NeoPixel strip(hexCount, LEDPin, NEO_GRB + NEO_KHZ800);
   enum { NoAnim, StarAnim, SplashAnim, OrbitAnim, OctaveAnim, NoteAnim };
   byte animationType = 0;
-  byte animationFPS = 32; // actually frames per 2^10 seconds. close
-enough to 30fps
+  byte animationFPS = 32; // actually frames per 2^10 seconds. close enough to 30fps
   int16_t rainbowDegreeTime = 64; // ms to go through 1/360 of rainbow.
 // ====== initialize hex state object
 
@@ -81,26 +68,19 @@ enough to 30fps
     int8_t col;
   } coordinates;
   typedef struct {
-    byte keyState = 0;          // binary 00 = off, 01 = just pressed,
-10 = just released, 11 = held
+    byte keyState = 0;          // binary 00 = off, 01 = just pressed, 10 = just released, 11 = held
     coordinates coords = {0,0};
     uint32_t timePressed = 0;   // timecode of last press
     uint32_t LEDcolorAnim = 0;      //
     uint32_t LEDcolorPlay = 0;      //
     uint32_t LEDcolorOn = 0;   //
     uint32_t LEDcolorOff = 0;  //
-    bool animate = 0;           // hex is flagged as part of the
-animation in this frame
-    int16_t steps = 0;          // number of steps from key center
-(semitones in 12EDO; microtones if >12EDO)
-    bool isCmd = 0;             // 0 if it's a MIDI note; 1 if it's a
-MIDI control cmd
-    bool inScale = 0;           // 0 if it's not in the selected
-scale; 1 if it is
-    byte note = 255;            // MIDI note or control parameter
-corresponding to this hex
-    int16_t bend;               // in microtonal mode, the pitch bend
-for this note needed to be tuned correctly
+    bool animate = 0;           // hex is flagged as part of the animation in this frame
+    int16_t steps = 0;          // number of steps from key center (semitones in 12EDO; microtones if >12EDO)
+    bool isCmd = 0;             // 0 if it's a MIDI note; 1 if it's a MIDI control cmd
+    bool inScale = 0;           // 0 if it's not in the selected scale; 1 if it is
+    byte note = 255;            // MIDI note or control parameter corresponding to this hex
+    int16_t bend;               // in microtonal mode, the pitch bend for this note needed to be tuned correctly
     byte channel;               // what MIDI channel this note is playing on
     float frequency;            // what frequency to ring on the buzzer
     void updateKeyState(bool keyPressed) {
@@ -212,12 +192,10 @@ for this note needed to be tuned correctly
   #define GEM_DISABLE_GLCD
   U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
   GEM_u8g2 menu(u8g2, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO, 10, 10,
-78); // menu item height; page screen top offset; menu values left
-offset
+78); // menu item height; page screen top offset; menu values left offset
   const byte defaultContrast = 63;           // GFX default contrast
   bool screenSaverOn = 0;                    //
-  uint32_t screenTime = 0;                   // GFX timer to count if
-screensaver should go on
+  uint32_t screenTime = 0;                   // GFX timer to count if screensaver should go on
   const uint32_t screenSaverMillis = 10000; //
 
 // ====== initialize piezo buzzer
@@ -227,8 +205,7 @@ screensaver should go on
   //RP2040_Volume piezoBuzzer(tonePin, tonePin);
   byte buzzer = 0;                      // buzzer state
   byte currentBuzzNote = 255;           // need to work on this
-  uint32_t currentBuzzTime = 0;         // Used to keep track of when
-this note started buzzin
+  uint32_t currentBuzzTime = 0;         // Used to keep track of when this note started buzzin
   uint32_t arpeggiateLength = 10;       //
 
 // ====== initialize tuning (microtonal) presets
@@ -245,8 +222,7 @@ this note started buzzin
     CarlosA, CarlosB, CarlosG
   };
   tuningDef tuningOptions[] = {
-    // replaces the idea of const byte EDO[] = { 12, 17, 19, 22, 24,
-31, 41, 53, 72 };
+    // replaces the idea of const byte EDO[] = { 12, 17, 19, 22, 24, 31, 41, 53, 72 };
     { (char*)"12 EDO",           12,  100.0 },
     { (char*)"17 EDO",           17, 1200.0 / 17 },
     { (char*)"19 EDO",           19, 1200.0 / 19 },
@@ -291,12 +267,9 @@ this note started buzzin
     { (char*)"Full Layout",       1, 65,  -1,  -9, TwentyFour },
     { (char*)"Bosanquet, 31",     0, 65,  -2,  -3, ThirtyOne  },
     { (char*)"Full Layout",       1, 65,  -1,  -9, ThirtyOne  },
-    { (char*)"Bosanquet, 41",     0, 65,  -4,  -3, FortyOne   },  //
-forty-one #1
-    { (char*)"Gerhard, 41",       0, 65,   3, -10, FortyOne   },  //
-forty-one #2
-    { (char*)"Full Layout, 41",   0, 65,  -1,  -8, FortyOne   },  //
-forty-one #3
+    { (char*)"Bosanquet, 41",     0, 65,  -4,  -3, FortyOne   },  // forty-one #1
+    { (char*)"Gerhard, 41",       0, 65,   3, -10, FortyOne   },  // forty-one #2
+    { (char*)"Full Layout, 41",   0, 65,  -1,  -8, FortyOne   },  // forty-one #3
     { (char*)"Wicki-Hayden, 53",  1, 64,   9, -31, FiftyThree },
     { (char*)"Harmonic Tbl, 53",  0, 75, -31,  14, FiftyThree },
     { (char*)"Bosanquet, 53",     0, 65,  -5,  -4, FiftyThree },
@@ -319,66 +292,40 @@ forty-one #3
   scaleDef scaleOptions[] = {
     { (char*)"None",              255,        { 255,        255,
   255,255,255,255,255,255,255,255,255,255,255,255,255,255} },
-    { (char*)"Major",             Twelve,     { 0b10101101,
-0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, natural",    Twelve,     { 0b10110101,
-0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, melodic",    Twelve,     { 0b10110101,
-0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, harmonic",   Twelve,     { 0b10110101,
-0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Pentatonic, major", Twelve,     { 0b10101001,
-0b0100'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Pentatonic, minor", Twelve,     { 0b10010101,
-0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Blues",             Twelve,     { 0b10010111,
-0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Double Harmonic",   Twelve,     { 0b11001101,
-0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Phrygian",          Twelve,     { 0b11010101,
-0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Phrygian Dominant", Twelve,     { 0b11001101,
-0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Dorian",            Twelve,     { 0b10110101,
-0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Lydian",            Twelve,     { 0b10101011,
-0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Lydian Dominant",   Twelve,     { 0b10101011,
-0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Mixolydian",        Twelve,     { 0b10101101,
-0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Locrian",           Twelve,     { 0b11010110,
-0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Whole tone",        Twelve,     { 0b10101010,
-0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Octatonic",         Twelve,     { 0b10110110,
-0b1101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Rast maqam",        TwentyFour, { 0b10001001,
-0b00100010, 0b00101100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Rast makam",        FiftyThree, { 0b10000000,
-0b01000000, 0b01000010, 0b00000001,
-                                                0b00000000,
-0b10001000, 0b10000'000, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Major",             Twelve,     { 0b10101101, 0b01010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Minor, natural",    Twelve,     { 0b10110101, 0b10100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Minor, melodic",    Twelve,     { 0b10110101, 0b01010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Minor, harmonic",   Twelve,     { 0b10110101, 0b10010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Pentatonic, major", Twelve,     { 0b10101001, 0b01000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Pentatonic, minor", Twelve,     { 0b10010101, 0b00100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Blues",             Twelve,     { 0b10010111, 0b00100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Double Harmonic",   Twelve,     { 0b11001101, 0b10010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Phrygian",          Twelve,     { 0b11010101, 0b10100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Phrygian Dominant", Twelve,     { 0b11001101, 0b10100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Dorian",            Twelve,     { 0b10110101, 0b01100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Lydian",            Twelve,     { 0b10101011, 0b01010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Lydian Dominant",   Twelve,     { 0b10101011, 0b01100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Mixolydian",        Twelve,     { 0b10101101, 0b01100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Locrian",           Twelve,     { 0b11010110, 0b10100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Whole tone",        Twelve,     { 0b10101010, 0b10100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Octatonic",         Twelve,     { 0b10110110, 0b11010000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Rast maqam",        TwentyFour, { 0b10001001, 0b00100010, 0b00101100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char*)"Rast makam",        FiftyThree, { 0b10000000, 0b01000000, 0b01000010, 0b00000001,
+                                                0b00000000, 0b10001000, 0b10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
   };
   const byte scaleCount = sizeof(scaleOptions) / sizeof(scaleDef);
   byte scaleLock = 0;    // menu wants this to be an int, not a bool
 
 // ====== initialize key coloring routines
 
-  enum colors      { W,    R,    O,    Y,    L,    G,    C,    B,
-I,    P,    M,
-                          r,    o,    y,    l,    g,    c,    b,    i,
-   p,    m     };
+  enum colors      { W,    R,    O,    Y,    L,    G,    C,    B,    I,    P,    M,
+                          r,    o,    y,    l,    g,    c,    b,    i,   p,    m     };
   enum { DARK = 0, VeryDIM = 1, DIM = 32, BRIGHT = 127, VeryBRIGHT = 255 };
   enum { GRAY = 0, DULL = 127, VIVID = 255 };
-  float hueCode[] = { 0.0, 0.0, 36.0, 72.0, 108.0, 144.0, 180.0,
-216.0, 252.0, 288.0, 324.0,
-                           0.0, 36.0, 72.0, 108.0, 144.0, 180.0,
-216.0, 252.0, 288.0, 324.0  };
-  byte satCode[] = { GRAY,
-VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,
-                          DULL, DULL, DULL, DULL, DULL, DULL, DULL,
-DULL, DULL, DULL  };
+  float hueCode[] = { 0.0, 0.0, 36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0,
+                           0.0, 36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0  };
+  byte satCode[] = { GRAY, VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,
+                          DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL  };
   byte colorMode = 0;
   byte perceptual = 1;
   enum {assignDefault = -1}; // auto-determine this component of color
@@ -754,12 +701,9 @@ DULL, DULL, DULL  };
   const int keyCount = sizeof(keyOptions) / sizeof(keyDef);
 // ====== initialize structure to store and recall user preferences
 
-  typedef struct { // put all user-selectable options into a class so
-that down the line these can be saved and loaded.
+  typedef struct { // put all user-selectable options into a class so that down the line these can be saved and loaded.
     char* presetName;
-    int tuningIndex;     // instead of using pointers, i chose to
-store index value of each option, to be saved to a .pref or .ini or
-something
+    int tuningIndex;     // instead of using pointers, i chose to store index value of each option, to be saved to a .pref or .ini or something
     int layoutIndex;
     int scaleIndex;
     int keyIndex;
@@ -856,17 +800,14 @@ something
     temp.col = destination.col - origin.col;
     return temp;
   }
-  float freqToMIDI(float Hz) {             // formula to convert from
-Hz to MIDI note
+  float freqToMIDI(float Hz) {             // formula to convert from Hz to MIDI note
     return 69.0 + 12.0 * log2f(Hz / 440.0);
   }
-  float MIDItoFreq(float MIDI) {           // formula to convert from
-MIDI note to Hz
+  float MIDItoFreq(float MIDI) {           // formula to convert from MIDI note to Hz
     return 440.0 * exp2((MIDI - 69.0) / 12.0);
   }
   float stepsToMIDI(int16_t stepsFromA) {  // return the MIDI pitch associated
-    return freqToMIDI(concertA) + ((float)stepsFromA *
-(float)current.tuning().stepSize / 100.0);
+    return freqToMIDI(concertA) + ((float)stepsFromA * (float)current.tuning().stepSize / 100.0);
   }
 
 // ====== diagnostic wrapper
@@ -883,32 +824,25 @@ MIDI note to Hz
     if ((!perceptual) || (D > 360.0)) {
       return 65536 * (D / 360.0);
     } else {
-      //                red             yellow                 green
-            blue
-      int hueIn[] =  {    0,    9,   18,   90,  108,  126,  135,  150,
- 198,  243,  252,  261,  306,  333,  360};
-      //          #ff0000            #ffff00           #00ff00
-#00ffff     #0000ff     #ff00ff
-      int hueOut[] = {    0, 3640,
-5461,10922,12743,16384,21845,27306,32768,38229,43690,49152,54613,58254,65535};
+      //                red             yellow                 green            blue
+      int hueIn[] =  {    0,    9,   18,   90,  108,  126,  135,  150,  198,  243,  252,  261,  306,  333,  360};
+      //          #ff0000            #ffff00           #00ff00 #00ffff     #0000ff     #ff00ff
+      int hueOut[] = {    0, 3640, 5461,10922,12743,16384,21845,27306,32768,38229,43690,49152,54613,58254,65535};
       byte B = 0;
       while (D - hueIn[B] > 0) {
         B++;
       };
-      return hueOut[B - 1] + (hueOut[B] - hueOut[B - 1]) * ((D -
-(float)hueIn[B - 1])/(float)(hueIn[B] - hueIn[B - 1]));
+      return hueOut[B - 1] + (hueOut[B] - hueOut[B - 1]) * ((D - (float)hueIn[B - 1])/(float)(hueIn[B] - hueIn[B - 1]));
     };
   }
-  void resetHexLEDs() { // calculate color codes for each hex, store
-for playback
+  void resetHexLEDs() { // calculate color codes for each hex, store for playback
     int16_t hue;
     float hueDegrees;
     byte sat;
     colors c;
     for (byte i = 0; i < hexCount; i++) {
       if (!(h[i].isCmd)) {
-        byte scaleDegree = positiveMod(h[i].steps +
-current.key().offset - current.findC(),current.tuning().cycleLength);
+        byte scaleDegree = positiveMod(h[i].steps + current.key().offset - current.findC(),current.tuning().cycleLength);
         switch (colorMode) {
           case 1:
             c = keyOptions[current.keysBegin() + scaleDegree].tierColor;
@@ -916,8 +850,7 @@ current.key().offset - current.findC(),current.tuning().cycleLength);
             sat = satCode[c];
             break;
           default:
-            hueDegrees = 360.0 * ((float)scaleDegree /
-(float)current.tuning().cycleLength);
+            hueDegrees = 360.0 * ((float)scaleDegree / (float)current.tuning().cycleLength);
             sat = 255;
             break;
         };
@@ -934,13 +867,11 @@ current.key().offset - current.findC(),current.tuning().cycleLength);
 
 // ====== layout routines
 
-  void assignPitches() {     // run this if the layout, key, or
-transposition changes, but not if color or scale changes
+  void assignPitches() {     // run this if the layout, key, or transposition changes, but not if color or scale changes
     sendToLog("assignPitch was called:");
     for (byte i = 0; i < hexCount; i++) {
       if (!(h[i].isCmd)) {
-        float N = stepsToMIDI(h[i].steps + current.key().offset +
-current.transpose);
+        float N = stepsToMIDI(h[i].steps + current.key().offset + current.transpose);
         if (N < 0 || N >= 128) {
           h[i].note = 255;
           h[i].bend = 0;
@@ -989,8 +920,7 @@ current.transpose);
     sendToLog("buildLayout was called:");
     for (byte i = 0; i < hexCount; i++) {
       if (!(h[i].isCmd)) {
-        coordinates dist =
-hexDistance(h[current.layout().rootHex].coords, h[i].coords);
+        coordinates dist = hexDistance(h[current.layout().rootHex].coords, h[i].coords);
         h[i].steps = (
           (dist.col * current.layout().acrossSteps) +
           (dist.row * (
@@ -1004,11 +934,9 @@ hexDistance(h[current.layout().rootHex].coords, h[i].coords);
         ));
       };
     };
-    applyScale();        // when layout changes, have to re-apply
-scale and re-apply LEDs
+    applyScale();        // when layout changes, have to re-apply scale and re-apply LEDs
     assignPitches();     // same with pitches
-    u8g2.setDisplayRotation(current.layout().isPortrait ? U8G2_R2 :
-U8G2_R1);     // and landscape / portrait rotation
+    u8g2.setDisplayRotation(current.layout().isPortrait ? U8G2_R2 : U8G2_R1);     // and landscape / portrait rotation
     sendToLog("buildLayout complete.");
   }
 // ====== buzzer routines
@@ -1027,10 +955,8 @@ U8G2_R1);     // and landscape / portrait rotation
   void buzz(byte x) {        // send 128 or larger to turn off tone
     currentBuzzNote = x;
     if ((!(h[x].isCmd)) && (h[x].note < 128) && (h[x].frequency < 32767)) {
-      //piezoBuzzer.tone(h[x].frequency, (float)velWheel.curValue *
-(100.0 / 128.0), 16384, TIME_MS);
-      tone(tonePin, h[x].frequency);     // stock TONE library, but
-frequency changed to float
+      //piezoBuzzer.tone(h[x].frequency, (float)velWheel.curValue * (100.0 / 128.0), 16384, TIME_MS);
+      tone(tonePin, h[x].frequency);     // stock TONE library, but frequency changed to float
     } else {
       //piezoBuzzer.stop_tone();
       noTone(tonePin);                     // stock TONE library
@@ -1057,23 +983,17 @@ frequency changed to float
     ));
   }
   void prepMIDIforMicrotones() {
-    bool makeZone = (MPE && (current.tuningIndex != Twelve)); // if
-MPE flag is on and tuning <> 12EDO
-    setMPEzone(1, (8 * makeZone));   // MPE zone 1 = ch 2 thru 9 (or
-reset if not using MPE)
+    bool makeZone = (MPE && (current.tuningIndex != Twelve)); // if MPE flag is on and tuning <> 12EDO
+    setMPEzone(1, (8 * makeZone));   // MPE zone 1 = ch 2 thru 9 (or reset if not using MPE)
     delay(ccMsgCoolDown);
-    setMPEzone(16, (5 * makeZone));  // MPE zone 16 = ch 11 thru 15
-(or reset if not using MPE)
+    setMPEzone(16, (5 * makeZone));  // MPE zone 16 = ch 11 thru 15 (or reset if not using MPE)
     delay(ccMsgCoolDown);
     for (byte i = 1; i <= 16; i++) {
-      setPitchBendRange(i, defaultPBRange);  // some synths try to set
-PB range to 48 semitones.
-      delay(ccMsgCoolDown);                  // this forces it back to
-the expected range of 2 semitones.
+      setPitchBendRange(i, defaultPBRange);  // some synths try to set PB range to 48 semitones.
+      delay(ccMsgCoolDown);                  // this forces it back to the expected range of 2 semitones.
       if ((i != 10) && ((!makeZone) || ((i > 1) && (i < 16)))) {
         openChannelQueue.push(i);
-        sendToLog(String("pushed ch " + String(i) + " to the open
-channel queue"));
+        sendToLog(String("pushed ch " + String(i) + " to the open channel queue"));
       };
       channelBend[i - 1] = 0;
       channelPoly[i - 1] = 0;
@@ -1082,40 +1002,32 @@ channel queue"));
   void chgModulation() {
   if (current.tuningIndex == Twelve) {
       MIDI.sendControlChange(1, modWheel.curValue, 1);
-      sendToLog(String("sent mod value " + String(modWheel.curValue) +
-" to ch 1"));
+      sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 1"));
     } else if (MPE) {
       MIDI.sendControlChange(1, modWheel.curValue, 1);
-      sendToLog(String("sent mod value " + String(modWheel.curValue) +
-" to ch 1"));
+      sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 1"));
       MIDI.sendControlChange(1, modWheel.curValue, 16);
-      sendToLog(String("sent mod value " + String(modWheel.curValue) +
-" to ch 16"));
+      sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 16"));
     } else {
       for (byte i = 0; i < 16; i++) {
         MIDI.sendControlChange(1, modWheel.curValue, i + 1);
-        sendToLog(String("sent mod value " + String(modWheel.curValue)
-+ " to ch " + String(i+1)));
+        sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch " + String(i+1)));
       };
     };
   };
   void chgUniversalPB() {
     if (current.tuningIndex == Twelve) {
       MIDI.sendPitchBend(pbWheel.curValue, 1);
-      sendToLog(String("sent pb value " + String(pbWheel.curValue) + "
-to ch 1"));
+      sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 1"));
     } else if (MPE) {
       MIDI.sendPitchBend(pbWheel.curValue, 1);
-      sendToLog(String("sent pb value " + String(pbWheel.curValue) + "
-to ch 1"));
+      sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 1"));
       MIDI.sendPitchBend(pbWheel.curValue, 16);
-      sendToLog(String("sent pb value " + String(pbWheel.curValue) + "
-to ch 16"));
+      sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 16"));
     } else {
       for (byte i = 0; i < 16; i++) {
         MIDI.sendPitchBend(channelBend[i] + pbWheel.curValue, i + 1);
-        sendToLog(String("sent pb value " + String(channelBend[i] +
-pbWheel.curValue) + " to ch " + String(i+1)));
+        sendToLog(String("sent pb value " + String(channelBend[i] + pbWheel.curValue) + " to ch " + String(i+1)));
       };
     };
   }
@@ -1125,20 +1037,16 @@ pbWheel.curValue) + " to ch " + String(i+1)));
       return 1;
     } else {
       byte temp = 17;
-      for (byte c = MPE; c < (16 - MPE); c++) {  // MPE - look at ch 2
-thru 15 [c 1-14]; otherwise ch 1 thru 16 [c 0-15]
-        if ((c + 1 != 10) && (h[x].bend == channelBend[c])) {  // not
-using drum channel ch 10 in either case
+      for (byte c = MPE; c < (16 - MPE); c++) {  // MPE - look at ch 2 thru 15 [c 1-14]; otherwise ch 1 thru 16 [c 0-15]
+        if ((c + 1 != 10) && (h[x].bend == channelBend[c])) {  // not using drum channel ch 10 in either case
           temp = c + 1;
-          sendToLog(String("found a matching channel: ch " +
-String(temp) + " has pitch bend " + String(channelBend[c])));
+          sendToLog(String("found a matching channel: ch " + String(temp) + " has pitch bend " + String(channelBend[c])));
           break;
         };
       };
       if (temp = 17) {
         if (openChannelQueue.empty()) {
-          sendToLog(String("channel queue was empty so we didn't send
-a note on"));
+          sendToLog(String("channel queue was empty so we didn't send a note on"));
         } else {
           temp = openChannelQueue.front();
           openChannelQueue.pop();
@@ -1226,20 +1134,14 @@ a note on"));
   }
   void animateMirror() {
     for (byte i = 0; i < hexCount; i++) {                   // check every hex
-      if ((!(h[i].isCmd)) && (h[i].channel)) {              // that is
-a held note
-        for (byte j = 0; j < hexCount; j++) {               // compare
-to every hex
-          if ((!(h[j].isCmd)) && (!(h[j].channel))) {       // that is
-a note not being played
-            int16_t temp = h[i].steps - h[j].steps;         // look at
-difference between notes
-            if (animationType == OctaveAnim) {              // set
-octave diff to zero if need be
+      if ((!(h[i].isCmd)) && (h[i].channel)) {              // that is a held note
+        for (byte j = 0; j < hexCount; j++) {               // compare to every hex
+          if ((!(h[j].isCmd)) && (!(h[j].channel))) {       // that is a note not being played
+            int16_t temp = h[i].steps - h[j].steps;         // look at difference between notes
+            if (animationType == OctaveAnim) {              // set octave diff to zero if need be
               temp = positiveMod(temp, current.tuning().cycleLength);
             };
-            if (temp == 0) {                                //
-highlight if diff is zero
+            if (temp == 0) {                                // highlight if diff is zero
               h[j].animate = 1;
             };
           };
@@ -1248,12 +1150,9 @@ highlight if diff is zero
     };
   }
   void animateOrbit() {
-    for (byte i = 0; i < hexCount; i++) {
- // check every hex
-      if ((!(h[i].isCmd)) && (h[i].channel)) {
- // that is a held note
-        flagToAnimate(hexOffset(h[i].coords,hexVector((h[i].animFrame()
-% 6),1)));       // different neighbor each frame
+    for (byte i = 0; i < hexCount; i++) { // check every hex
+      if ((!(h[i].isCmd)) && (h[i].channel)) { // that is a held note
+        flagToAnimate(hexOffset(h[i].coords,hexVector((h[i].animFrame() % 6),1))); // different neighbor each frame
       };
     };
   }
@@ -1268,8 +1167,7 @@ highlight if diff is zero
           byte steps = ((animationType == SplashAnim) ? radius : 1);
  // star = 1 step to next corner; ring = 1 step per hex
           coordinates temp =
-hexOffset(h[i].coords,hexVector(DnLeft,radius));  // start at one
-corner of the ring
+hexOffset(h[i].coords,hexVector(DnLeft,radius));  // start at one corner of the ring
           for (byte dir = 0; dir < 6; dir++) {
  // walk along the ring in each of the 6 hex directions
             for (byte i = 0; i < steps; i++) {
@@ -1304,36 +1202,28 @@ corner of the ring
                                            { "Splash" , SplashAnim},
                                            { "Orbit"  , OrbitAnim} };
 
-  GEMSelect selectYesOrNo(sizeof(optionByteYesOrNo) /
-sizeof(SelectOptionByte), optionByteYesOrNo);
-  GEMSelect selectBuzzer( sizeof(optionByteBuzzer)  /
-sizeof(SelectOptionByte), optionByteBuzzer);
-  GEMSelect selectColor(  sizeof(optionByteColor)   /
-sizeof(SelectOptionByte), optionByteColor);
-  GEMSelect selectAnimate(sizeof(optionByteAnimate) /
-sizeof(SelectOptionByte), optionByteAnimate);
+  GEMSelect selectYesOrNo(sizeof(optionByteYesOrNo) / sizeof(SelectOptionByte), optionByteYesOrNo);
+  GEMSelect selectBuzzer( sizeof(optionByteBuzzer)  / sizeof(SelectOptionByte), optionByteBuzzer);
+  GEMSelect selectColor(  sizeof(optionByteColor)   / sizeof(SelectOptionByte), optionByteColor);
+  GEMSelect selectAnimate(sizeof(optionByteAnimate) / sizeof(SelectOptionByte), optionByteAnimate);
 
   GEMPage  menuPageMain("HexBoard MIDI Controller");
 
   GEMPage  menuPageTuning("Tuning");
   GEMItem  menuGotoTuning("Tuning", menuPageTuning);
-  GEMItem* menuItemTuning[tuningCount]; // dynamically generate item
-based on tunings
+  GEMItem* menuItemTuning[tuningCount]; // dynamically generate item based on tunings
 
   GEMPage  menuPageLayout("Layout");
   GEMItem  menuGotoLayout("Layout", menuPageLayout);
-  GEMItem* menuItemLayout[layoutCount]; // dynamically generate item
-based on presets
+  GEMItem* menuItemLayout[layoutCount]; // dynamically generate item based on presets
 
   GEMPage  menuPageScales("Scales");
   GEMItem  menuGotoScales("Scales", menuPageScales);
-  GEMItem* menuItemScales[scaleCount];  // dynamically generate item
-based on presets and if allowed in given EDO tuning
+  GEMItem* menuItemScales[scaleCount];  // dynamically generate item based on presets and if allowed in given EDO tuning
 
   GEMPage  menuPageKeys("Keys");
   GEMItem  menuGotoKeys("Keys",     menuPageKeys);
-  GEMItem* menuItemKeys[keyCount];   // dynamically generate item
-based on presets
+  GEMItem* menuItemKeys[keyCount];   // dynamically generate item based on presets
 
   GEMItem  menuItemScaleLock( "Scale lock?",   scaleLock,     selectYesOrNo);
   GEMItem  menuItemMPE(       "MPE Mode:",     MPE,
@@ -1349,30 +1239,25 @@ selectYesOrNo, resetHexLEDs);
     menu.setMenuPageCurrent(menuPageMain);
     menu.drawMenu();
   }
-  void showOnlyValidLayoutChoices() { // re-run at setup and whenever
-tuning changes
+  void showOnlyValidLayoutChoices() { // re-run at setup and whenever tuning changes
     for (byte L = 0; L < layoutCount; L++) {
       menuItemLayout[L]->hide((layoutOptions[L].tuning != current.tuningIndex));
     };
     sendToLog(String("menu: Layout choices were updated."));
   }
-  void showOnlyValidScaleChoices() { // re-run at setup and whenever
-tuning changes
+  void showOnlyValidScaleChoices() { // re-run at setup and whenever tuning changes
     for (int S = 0; S < scaleCount; S++) {
-      menuItemScales[S]->hide((scaleOptions[S].tuning !=
-current.tuningIndex) && (scaleOptions[S].tuning != 255));
+      menuItemScales[S]->hide((scaleOptions[S].tuning != current.tuningIndex) && (scaleOptions[S].tuning != 255));
     };
     sendToLog(String("menu: Scale choices were updated."));
   }
-  void showOnlyValidKeyChoices() { // re-run at setup and whenever
-tuning changes
+  void showOnlyValidKeyChoices() { // re-run at setup and whenever tuning changes
     for (int K = 0; K < keyCount; K++) {
       menuItemKeys[K]->hide((keyOptions[K].tuning != current.tuningIndex));
     };
     sendToLog(String("menu: Key choices were updated."));
   }
-  void changeLayout(GEMCallbackData callbackData) {  // when you
-change the layout via the menu
+  void changeLayout(GEMCallbackData callbackData) {  // when you change the layout via the menu
     byte selection = callbackData.valByte;
     if (selection != current.layoutIndex) {
       current.layoutIndex = selection;
@@ -1380,8 +1265,7 @@ change the layout via the menu
     };
     menuHome();
   }
-  void changeScale(GEMCallbackData callbackData) {   // when you
-change the scale via the menu
+  void changeScale(GEMCallbackData callbackData) {   // when you change the scale via the menu
     int selection = callbackData.valInt;
     if (selection != current.scaleIndex) {
       current.scaleIndex = selection;
@@ -1389,8 +1273,7 @@ change the scale via the menu
     };
     menuHome();
   }
-  void changeKey(GEMCallbackData callbackData) {     // when you
-change the key via the menu
+  void changeKey(GEMCallbackData callbackData) {     // when you change the key via the menu
     int selection = callbackData.valInt;
     if (selection != current.keyIndex) {
       current.keyIndex = selection;
@@ -1415,8 +1298,7 @@ change the key via the menu
   }
   void buildMenu() {
     menuPageMain.addMenuItem(menuGotoTuning);
-    for (byte T = 0; T < tuningCount; T++) { // create pointers to all
-tuning choices
+    for (byte T = 0; T < tuningCount; T++) { // create pointers to all tuning choices
       menuItemTuning[T] = new GEMItem(tuningOptions[T].name, changeTuning, T);
       menuPageTuning.addMenuItem(*menuItemTuning[T]);
     };
@@ -1429,8 +1311,7 @@ tuning choices
     showOnlyValidLayoutChoices();
 
     menuPageMain.addMenuItem(menuGotoScales);
-    for (int S = 0; S < scaleCount; S++) {  // create pointers to all
-scale items, filter them as you go
+    for (int S = 0; S < scaleCount; S++) {  // create pointers to all scale items, filter them as you go
       menuItemScales[S] = new GEMItem(scaleOptions[S].name, changeScale, S);
       menuPageScales.addMenuItem(*menuItemScales[S]);
     };
@@ -1457,14 +1338,11 @@ scale items, filter them as you go
 // ====== setup routines
 
   void setupMIDI() {
-    usb_midi.setStringDescriptor("HexBoard MIDI");  // Initialize
-MIDI, and listen to all MIDI channels
-    MIDI.begin(MIDI_CHANNEL_OMNI);                  // This will also
-call usb_midi's begin()
+    usb_midi.setStringDescriptor("HexBoard MIDI");  // Initialize MIDI, and listen to all MIDI channels
+    MIDI.begin(MIDI_CHANNEL_OMNI);                  // This will also call usb_midi's begin()
   }
   void setupFileSystem() {
-    Serial.begin(115200);     // Set serial to make uploads work
-without bootsel button
+    Serial.begin(115200);     // Set serial to make uploads work without bootsel button
     LittleFSConfig cfg;       // Configure file system defaults
     cfg.setAutoFormat(true);  // Formats file system if it cannot be mounted.
     LittleFS.setConfig(cfg);
@@ -1476,13 +1354,11 @@ without bootsel button
   void setupPins() {
     for (byte p = 0; p < sizeof(columnPins); p++)  // For each column pin...
     {
-      pinMode(columnPins[p], INPUT_PULLUP);  // set the pinMode to
-INPUT_PULLUP (+3.3V / HIGH).
+      pinMode(columnPins[p], INPUT_PULLUP);  // set the pinMode to INPUT_PULLUP (+3.3V / HIGH).
     }
     for (byte p = 0; p < sizeof(multiplexPins); p++)  // For each column pin...
     {
-      pinMode(multiplexPins[p], OUTPUT);  // Setting the row
-multiplexer pins to output.
+      pinMode(multiplexPins[p], OUTPUT);  // Setting the row multiplexer pins to output.
     }
     Wire.setSDA(lightPinSDA);
     Wire.setSCL(lightPinSCL);
@@ -1526,12 +1402,9 @@ multiplexer pins to output.
 
   void timeTracker() {
     lapTime = runTime - loopTime;
-    // sendToLog(String(lapTime));  // Print out the time it takes to
-run each loop
-    loopTime = runTime;  // Update previousTime variable to give us a
-reference point for next loop
-    runTime = millis();   // Store the current time in a uniform
-variable for this program loop
+    // sendToLog(String(lapTime));  // Print out the time it takes to run each loop
+    loopTime = runTime;  // Update previousTime variable to give us a reference point for next loop
+    runTime = millis();   // Store the current time in a uniform variable for this program loop
   }
   void screenSaver() {
     if (screenTime <= screenSaverMillis) {
@@ -1548,24 +1421,17 @@ variable for this program loop
     }
   }
   void readHexes() {
-    for (byte r = 0; r < rowCount; r++) {  // Iterate through each of
-the row pins on the multiplexing chip.
+    for (byte r = 0; r < rowCount; r++) {  // Iterate through each of the row pins on the multiplexing chip.
       for (byte d = 0; d < 4; d++) {
         digitalWrite(multiplexPins[d], (r >> d) & 1);
       }
-      for (byte c = 0; c < colCount; c++) {   // Now iterate through
-each of the column pins that are connected to the current row pin.
-        byte p = columnPins[c];               // Hold the currently
-selected column pin in a variable.
-        pinMode(p, INPUT_PULLUP);             // Set that row pin to
-INPUT_PULLUP mode (+3.3V / HIGH).
-        delayMicroseconds(10);                // Delay to give the pin
-modes time to change state (false readings are caused otherwise).
-        bool didYouPressHex = (digitalRead(p) == LOW);  // hex is
-pressed if it returns LOW. else not pressed
+      for (byte c = 0; c < colCount; c++) {   // Now iterate through each of the column pins that are connected to the current row pin.
+        byte p = columnPins[c];               // Hold the currently selected column pin in a variable.
+        pinMode(p, INPUT_PULLUP);             // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
+        delayMicroseconds(10);                // Delay to give the pin modes time to change state (false readings are caused otherwise).
+        bool didYouPressHex = (digitalRead(p) == LOW);  // hex is pressed if it returns LOW. else not pressed
         h[c + (r * colCount)].updateKeyState(didYouPressHex);
-        pinMode(p, INPUT);  // Set the selected column pin back to
-INPUT mode (0V / LOW).
+        pinMode(p, INPUT);  // Set the selected column pin back to INPUT mode (0V / LOW).
        }
     }
   }
@@ -1606,8 +1472,7 @@ INPUT mode (0V / LOW).
   }
   void updateWheels() {
     velWheel.setTargetValue();
-    bool upd = velWheel.updateValue(); // this function returns a
-boolean, gotta put it somewhere even if it isn't being used
+    bool upd = velWheel.updateValue(); // this function returns a boolean, gotta put it somewhere even if it isn't being used
     if (upd) {
       sendToLog(String("vel became " + String(velWheel.curValue)));
     }
@@ -1754,8 +1619,7 @@ without built-in support for TinyUSB such as mbed rp2040
     setupMIDI();
     setupFileSystem();
     setupPins();
-    testDiagnostics();  // Print diagnostic troubleshooting
-information to serial monitor
+    testDiagnostics();  // Print diagnostic troubleshooting information to serial monitor
     setupGrid();
     setupLEDs();
     setupGFX();
@@ -1770,8 +1634,7 @@ information to serial monitor
   void loop() {   // run on first core
     timeTracker();  // Time tracking functions
     screenSaver();  // Reduces wear-and-tear on OLED panel
-    readHexes();       // Read and store the digital button states of
-the scanning matrix
+    readHexes();       // Read and store the digital button states of the scanning matrix
     actionHexes();       // actions on hexes
     arpeggiate();      // arpeggiate the buzzer
     updateWheels();   // deal with the pitch/mod wheel
