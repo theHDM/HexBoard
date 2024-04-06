@@ -10,6 +10,7 @@ or [contact Jared](mailto:jared@shapingthesilence.com) if you're interested in a
 ## The Team
 * Jared DeCook has been writing music, developing hardware, and performing as [Shaping The Silence](https://shapingthesilence.com/) for over a decade.
 * Zach DeCook has been listening to music, breaking hardware, and occasionally writing software since the former discovered his exploitable talents.
+* Nicholas Fox has been 'hexperimenting' with the firmware since before receiving a HexBoard in the mail.
 
 ## HexBoard "Arduino" firmware
 
@@ -22,6 +23,12 @@ Build artifacts are usually also attached to the [tagged releases on sourcehut](
 The files are in the format `VX_Y_Z-model0.uf2`, where
 * `X_Y_Z` is the version number
 * `0` is the model number ("2" for production model, for sale since 2023. "1" for the 2022 development model with the RP2040 processor board).
+
+## Hexperiment firmware
+
+Created by Nicholas Fox, sometimes available at https://git.sr.ht/~earboxer/Hexperiment
+
+[![Sourcehut Build status](https://builds.sr.ht/~earboxer/Hexperiment/commits/.svg)](https://builds.sr.ht/~earboxer/Hexperiment/commits/?)
 
 ### Building the firmware
 
