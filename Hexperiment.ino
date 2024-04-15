@@ -1,786 +1,958 @@
-// ====== Hexperiment
-  // Sketch to program the hexBoard to handle microtones
-  // March 2024, theHDM / Nicholas Fox
-  // major thanks to Zach and Jared!
+// ====== Hexperiment v1.2
+  // Copyright 2022-2023 Jared DeCook and Zach DeCook
+  // Licensed under the GNU GPL Version 3.
+  // Hardware Information:
+  // Generic RP2040 running at 133MHz with 16MB of flash
+  // https://github.com/earlephilhower/arduino-pico
+  // (Additional boards manager URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json)
+  // Tools > USB Stack > (Adafruit TinyUSB)
+  // Sketch > Export Compiled Binary
+  //
+  // Brilliant resource for dealing with hexagonal coordinates. https://www.redblobgames.com/grids/hexagons/
+  // Used this to get my hexagonal animations sorted. http://ondras.github.io/rot.js/manual/#hex/indexing
+  //
+  // Menu library documentation https://github.com/Spirik/GEM
+  //
   // Arduino IDE setup:
   // Board = Generic RP2040 (use the following additional board manager repo:
   // https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json)
+  //
   // Patches needed for U8G2, Rotary.h
-  // ==============================================================================
-  // list of things remaining to do:
-  // -- get MPE to work on pianoteq -- OK, for the most part
-  // -- get MPE to work on logic pro
-  // -- get MPE to work on garageband iOS
-  // -- save and load presets
-  // -- sequencer restore
   // ==============================================================================
   
   #include <Arduino.h>
-  #include <Wire.h>
-  #include <LittleFS.h>
-  #include <queue>              // std::queue construct to store open channels in microtonal mode
-  const byte diagnostics = 0;
-
-// ====== initialize timers
-
-  uint32_t runTime = 0;                 // Program loop consistent variable for time in milliseconds since power on
-  uint32_t lapTime = 0;                 // Used to keep track of how long each loop takes. Useful for rate-limiting.
-  uint32_t loopTime = 0;               // Used to check speed of the loop in diagnostics mode 4
-  // since we're already using a hardware timer, might want to consider having these timers also rely on timer_hw too.
-
-// ====== initialize SDA and SCL pins for hardware I/O
-  
-  #define SDAPIN 16
-  #define SCLPIN 17
-
-// ====== initialize MIDI
-  
   #include <Adafruit_TinyUSB.h>
+  #include "LittleFS.h"
   #include <MIDI.h>
-  Adafruit_USBD_MIDI usb_midi;
-  MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
-  #define concertA 440.0
-  byte enableMIDI = 1;
-  byte MPE = 0; // microtonal mode. if zero then attempt to self-manage multiple channels. 
-              // if one then on certain synths that are MPE compatible will send in that mode.
-  int16_t channelBend[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // what's the current note bend on this channel
-  byte channelPoly[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };      // how many notes are playing on this channel
-  std::queue<byte> openChannelQueue;
-  #define defaultPBRange 2
-
-// ====== initialize LEDs
-
   #include <Adafruit_NeoPixel.h>
-  const byte multiplexPins[] = { 4, 5, 2, 3 };  // m1p, m2p, m4p, m8p
-  const byte columnPins[] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-  #define ROWCOUNT 14
-  #define COLCOUNT 10
-  #define HEXCOUNT 140
-
-  #define LEDPIN 22
-  Adafruit_NeoPixel strip(HEXCOUNT, LEDPIN, NEO_GRB + NEO_KHZ800);
-  enum { NoAnim, StarAnim, SplashAnim, OrbitAnim, OctaveAnim, NoteAnim };
-  byte animationType = 0;
-  byte animationFPS = 32; // actually frames per 2^10 seconds. close enough to 30fps
-  int16_t rainbowDegreeTime = 64; // ms to go through 1/360 of rainbow.
-
-// ====== initialize hex state object
-
-  enum { Right, UpRight, UpLeft, Left, DnLeft, DnRight };
-  typedef struct {
-    int8_t row;
-    int8_t col;
-  } coordinates;  
-  typedef struct {
-    byte keyState = 0;          // binary 00 = off, 01 = just pressed, 10 = just released, 11 = held
-    coordinates coords = {0,0};
-    uint32_t timePressed = 0;   // timecode of last press
-    uint32_t LEDcolorAnim = 0;      // 
-    uint32_t LEDcolorPlay = 0;      // 
-    uint32_t LEDcolorOn = 0;   // 
-    uint32_t LEDcolorOff = 0;  // 
-    bool animate = 0;           // hex is flagged as part of the animation in this frame
-    int16_t steps = 0;          // number of steps from key center (semitones in 12EDO; microtones if >12EDO)
-    bool isCmd = 0;             // 0 if it's a MIDI note; 1 if it's a MIDI control cmd
-    bool inScale = 0;           // 0 if it's not in the selected scale; 1 if it is
-    byte note = 255;            // MIDI note or control parameter corresponding to this hex
-    int16_t bend;               // in microtonal mode, the pitch bend for this note needed to be tuned correctly
-    byte channel;               // what MIDI channel this note is playing on
-    float frequency;            // what frequency to ring on the buzzer
-    void updateKeyState(bool keyPressed) {
-      keyState = (((keyState << 1) + keyPressed) & 3);
-      if (keyState == 1) {
-        timePressed = millis();  // log the time
-      };
-    };
-    uint32_t animFrame() {     
-      if (timePressed) {    // 2^10 milliseconds is close enough to 1 second
-        return 1 + (((runTime - timePressed) * animationFPS) >> 10);
-      } else {
-        return 0;
-      };
-    };
-  } buttonDef;
-  buttonDef h[HEXCOUNT]; // array of hex objects from 0 to 139
-  const byte assignCmd[] = { 0, 20, 40, 60, 80, 100, 120 };
-  const byte cmdCount = 7;
-  const byte cmdCode = 192;
-
-// ====== initialize wheel emulation
-
-  const uint16_t ccMsgCoolDown = 32; // milliseconds between steps
-  typedef struct {
-    byte* topBtn;
-    byte* midBtn;
-    byte* botBtn;
-    int16_t minValue;
-    int16_t maxValue;
-    uint16_t stepValue;
-    int16_t defValue;
-    int16_t curValue;
-    int16_t targetValue;
-    uint32_t timeLastChanged;
-    void setTargetValue() {
-      if (*midBtn >> 1) { // middle button toggles target (0) vs. step (1) mode
-        int16_t temp = curValue;
-             if (*topBtn == 1)     {temp += stepValue;};
-             if (*botBtn == 1)     {temp -= stepValue;};
-             if (temp > maxValue)  {temp  = maxValue;} 
-        else if (temp <= minValue) {temp  = minValue;};
-        targetValue = temp;
-      } else {
-        switch (((*topBtn >> 1) << 1) + (*botBtn >> 1)) {
-          case 0b10:   targetValue = maxValue;     break;
-          case 0b11:   targetValue = defValue;     break;
-          case 0b01:   targetValue = minValue;     break;
-          default:     targetValue = curValue;     break;
-        };
-      };
-    };
-    bool updateValue() {
-      int16_t temp = targetValue - curValue;
-      if (temp != 0) {
-        if ((runTime - timeLastChanged) >= ccMsgCoolDown) {
-          timeLastChanged = runTime;
-          if (abs(temp) < stepValue) {
-            curValue = targetValue;
-          } else {
-            curValue = curValue + (stepValue * (temp / abs(temp)));
-          };
-          return 1;
-        } else {
-          return 0;
-        };
-      } else {
-        return 0;
-      };
-    };   
-  } wheelDef;
-  wheelDef modWheel = {
-    &h[assignCmd[4]].keyState,
-    &h[assignCmd[5]].keyState,
-    &h[assignCmd[6]].keyState,
-    0, 127, 8,
-    0, 0, 0
-  }; 
-  wheelDef pbWheel =  {
-    &h[assignCmd[4]].keyState,
-    &h[assignCmd[5]].keyState,
-    &h[assignCmd[6]].keyState,
-    -8192, 8192, 1024,
-    0, 0, 0
-  };
-  wheelDef velWheel = {
-    &h[assignCmd[0]].keyState,
-    &h[assignCmd[1]].keyState,
-    &h[assignCmd[2]].keyState,
-    0, 127, 8,  
-    96, 96, 96
-  };
-  bool toggleWheel = 0; // 0 for mod, 1 for pb
-
-// ====== initialize rotary knob
-
-  #include <Rotary.h>
-  #define rotaryPinA 20
-  #define rotaryPinB 21
-  #define rotaryPinC 24
-  Rotary rotary = Rotary(rotaryPinA, rotaryPinB);
-  bool rotaryIsClicked = HIGH;          //
-  bool rotaryWasClicked = HIGH;         //
-  int8_t rotaryKnobTurns = 0;           //
-  byte maxKnobTurns = 10;
-
-// ====== initialize GFX display
-
-  #include <GEM_u8g2.h>
   #define GEM_DISABLE_GLCD
-  U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
-  GEM_u8g2 menu(u8g2, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO, 10, 10, 78); // menu item height; page screen top offset; menu values left offset
-  const byte defaultContrast = 63;           // GFX default contrast
-  bool screenSaverOn = 0;                    //
-  uint32_t screenTime = 0;                   // GFX timer to count if screensaver should go on
-  const uint32_t screenSaverMillis = 10'000; //
-
-// ====== initialize piezo buzzer
-
+  #include <GEM_u8g2.h>
+  #include <Wire.h>
+  #include <Rotary.h>
   #include "hardware/pwm.h"
   #include "hardware/timer.h"
   #include "hardware/irq.h"
+  #include <queue>              // std::queue construct to store open channels in microtonal mode
+  #include <string>
+  
+  // hardware pins
+    #define SDAPIN 16
+    #define SCLPIN 17
 
-  #define TONEPIN 23
-  #define TONE_SL 3
-  #define TONE_CH 1
-  #define WAVE_RESOLUTION 16
-  #define ALARM_NUM 2
-  #define ALARM_IRQ TIMER_IRQ_2
+  // USB MIDI object //
+    Adafruit_USBD_MIDI usb_midi;
+    // Create a new instance of the Arduino MIDI Library,
+    // and attach usb_midi as the transport.
+    MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
+    #define CONCERT_A_HZ 440.0
+    int16_t channelBend[16];   // what's the current note bend on this channel
+    byte channelPoly[16];      // how many notes are playing on this channel
+    std::queue<byte> openChannelQueue;
+    #define PITCH_BEND_SEMIS 2
 
-  typedef struct {
-    char* name;
-    byte lvl[WAVE_RESOLUTION];
-  } waveDef;
-  waveDef wf[] = { // from [0..129]
-    {(char*)"Square",  {0,0,0,0,0,0,0,0,129,129,129,129,129,129,129,129}},
-    {(char*)"Saw",  {0,9,17,26,34,43,52,60,69,77,86,95,103,112,120,129}},
-    {(char*)"3iangle",  {0,16,32,48,65,81,97,113,129,113,97,81,65,48,32,16}},
-    {(char*)"Sine",  {0,5,19,40,65,89,110,124,129,124,110,89,65,40,19,5}}
-  };
-  byte currWave = 0;
-  byte wfTick = 0;
-  byte wfLvl = 0;
-  uint32_t microSecondsPerCycle = 1000000;
-  uint32_t microSecondsPerTick = microSecondsPerCycle / WAVE_RESOLUTION;
+  // LED SETUP //
+    #define LED_PIN 22
+    #define LED_COUNT 140
+    Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-  byte playbackMode = 2;                //  buzzer
-  byte currentHexBuzzing = 255;         // if this is 255, buzzer set to off (0% duty cycle)
-  uint32_t currentBuzzTime = 0;         // Used to keep track of when this note started buzzin
-  uint32_t arpeggiateLength = 60;       //
+  // ENCODER SETUP //
+    #define ROT_PIN_A 20
+    #define ROT_PIN_B 21
+    #define ROT_PIN_C 24
+    Rotary rotary = Rotary(ROT_PIN_A, ROT_PIN_B);
+    bool rotaryIsClicked = HIGH;          //
+    bool rotaryWasClicked = HIGH;         //
+    int8_t rotaryKnobTurns = 0;           //
+    byte maxKnobTurns = 10;
 
-// ====== initialize tuning (microtonal) presets
+  // Create an instance of the U8g2 graphics library.
+    U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE);
 
-  typedef struct {
-    char* name;
-    byte cycleLength; // steps before repeat
-    float stepSize;   // in cents, 100 = "normal" semitone.
-  } tuningDef;
-  enum {
-    Twelve, Seventeen, Nineteen, TwentyTwo, 
-    TwentyFour, ThirtyOne, FortyOne, FiftyThree, 
-    SeventyTwo, BohlenPierce, 
-    CarlosA, CarlosB, CarlosG
-  };
-  tuningDef tuningOptions[] = {
-    // replaces the idea of const byte EDO[] = { 12, 17, 19, 22, 24, 31, 41, 53, 72 };
-    { (char*)"12 EDO",           12,  100.0 },
-    { (char*)"17 EDO",           17, 1200.0 / 17 },
-    { (char*)"19 EDO",           19, 1200.0 / 19 },
-    { (char*)"22 EDO",           22, 1200.0 / 22 },
-    { (char*)"24 EDO",           24,   50.0 },
-    { (char*)"31 EDO",           31, 1200.0 / 31 },
-    { (char*)"41 EDO",           41, 1200.0 / 41 },
-    { (char*)"53 EDO",           53, 1200.0 / 53 },
-    { (char*)"72 EDO",           72,  100.0 / 6 },
-    { (char*)"Bohlen-Pierce",    13, 1901.955 / 13 }, //
-    { (char*)"Carlos Alpha",      9, 77.965 }, //
-    { (char*)"Carlos Beta",      11, 63.833 }, //
-    { (char*)"Carlos Gamma",     20, 35.099 }
-  };
-  const byte tuningCount = sizeof(tuningOptions) / sizeof(tuningDef);
+  // Create menu object of class GEM_u8g2. Supply its constructor with reference to u8g2 object we created earlier
+    #define MENU_ITEM_HEIGHT 10
+    #define MENU_PAGE_SCREEN_TOP_OFFSET 10
+    #define MENU_VALUES_LEFT_OFFSET 78
+    GEM_u8g2 menu(
+      u8g2, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO, 
+      MENU_ITEM_HEIGHT, MENU_PAGE_SCREEN_TOP_OFFSET, MENU_VALUES_LEFT_OFFSET
+    );
+    const byte defaultContrast = 63;           // GFX default contrast
+    bool screenSaverOn = 0;                    //
+    uint32_t screenTime = 0;                   // GFX timer to count if screensaver should go on
+    const uint32_t screenSaverMillis = 10'000; //
 
-// ====== initialize layout patterns
+  // DIAGNOSTICS //
+    // 1 = Full button test (1 and 0)
+    // 2 = Button test (button number)
+    // 3 = MIDI output test
+    // 4 = Loop timing readout in milliseconds
+    const byte diagnostics = 0;
 
-  typedef struct {
-    char* name;
-    bool isPortrait;
-    byte rootHex;
-    int8_t acrossSteps;
-    int8_t dnLeftSteps;
-    byte tuning;
-  } layoutDef;
-  layoutDef layoutOptions[] = {
-    { (char*)"Wicki-Hayden",      1, 64,   2,  -7, Twelve     },
-    { (char*)"Harmonic Table",    0, 75,  -7,   3, Twelve     },
-    { (char*)"Janko",             0, 65,  -1,  -1, Twelve     },
-    { (char*)"Gerhard",           0, 65,  -1,  -3, Twelve     },
-    { (char*)"Accordion C-sys.",  1, 75,   2,  -3, Twelve     },
-    { (char*)"Accordion B-sys.",  1, 64,   1,  -3, Twelve     },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, Twelve     },
-    { (char*)"Bosanquet, 17",     0, 65,  -2,  -1, Seventeen  },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, Seventeen  },
-    { (char*)"Bosanquet, 19",     0, 65,  -1,  -2, Nineteen   },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, Nineteen   },
-    { (char*)"Bosanquet, 22",     0, 65,  -3,  -1, TwentyTwo  },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, TwentyTwo  },
-    { (char*)"Bosanquet, 24",     0, 65,  -1,  -3, TwentyFour },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, TwentyFour },
-    { (char*)"Bosanquet, 31",     0, 65,  -2,  -3, ThirtyOne  },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, ThirtyOne  },
-    { (char*)"Bosanquet, 41",     0, 65,  -4,  -3, FortyOne   },  // forty-one #1
-    { (char*)"Gerhard, 41",       0, 65,   3, -10, FortyOne   },  // forty-one #2
-    { (char*)"Full Layout, 41",   0, 65,  -1,  -8, FortyOne   },  // forty-one #3
-    { (char*)"Wicki-Hayden, 53",  1, 64,   9, -31, FiftyThree },
-    { (char*)"Harmonic Tbl, 53",  0, 75, -31,  14, FiftyThree },
-    { (char*)"Bosanquet, 53",     0, 65,  -5,  -4, FiftyThree },
-    { (char*)"Full Layout, 53",   0, 65,  -1,  -9, FiftyThree },
-    { (char*)"Full Layout, 72",   0, 65,  -1,  -9, SeventyTwo },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, BohlenPierce },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, CarlosA    },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, CarlosB    },
-    { (char*)"Full Layout",       1, 65,  -1,  -9, CarlosG    }
-  };
-  const byte layoutCount = sizeof(layoutOptions) / sizeof(layoutDef);
+  // Global time variables
+    uint32_t runTime = 0;                // Program loop consistent variable for time in milliseconds since power on
+    uint32_t lapTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
+    uint32_t loopTime = 0;               // Used to check speed of the loop in diagnostics mode 4
+    byte animationFPS = 32; // actually frames per 2^10 seconds. close enough to 30fps
+    int16_t rainbowDegreeTime = 64; // ms to go through 1/360 of rainbow.
 
-// ====== initialize list of supported scales / modes / raga / maqam
-
-  typedef struct {
-    char* name;
-    byte tuning;
-    byte step[16]; // 16 bytes = 128 bits, 1 = in scale; 0 = not
-  } scaleDef;
-  scaleDef scaleOptions[] = {
-    { (char*)"None",              255,        { 255,        255,         255,255,255,255,255,255,255,255,255,255,255,255,255,255} },
-    { (char*)"Major",             Twelve,     { 0b10101101, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, natural",    Twelve,     { 0b10110101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, melodic",    Twelve,     { 0b10110101, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Minor, harmonic",   Twelve,     { 0b10110101, 0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Pentatonic, major", Twelve,     { 0b10101001, 0b0100'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Pentatonic, minor", Twelve,     { 0b10010101, 0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Blues",             Twelve,     { 0b10010111, 0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Double Harmonic",   Twelve,     { 0b11001101, 0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Phrygian",          Twelve,     { 0b11010101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Phrygian Dominant", Twelve,     { 0b11001101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Dorian",            Twelve,     { 0b10110101, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Lydian",            Twelve,     { 0b10101011, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Lydian Dominant",   Twelve,     { 0b10101011, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Mixolydian",        Twelve,     { 0b10101101, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Locrian",           Twelve,     { 0b11010110, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Whole tone",        Twelve,     { 0b10101010, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Octatonic",         Twelve,     { 0b10110110, 0b1101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Rast maqam",        TwentyFour, { 0b10001001, 0b00100010, 0b00101100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-    { (char*)"Rast makam",        FiftyThree, { 0b10000000, 0b01000000, 0b01000010, 0b00000001,
-                                                0b00000000, 0b10001000, 0b10000'000, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
-  };
-  const byte scaleCount = sizeof(scaleOptions) / sizeof(scaleDef);
-  byte scaleLock = 0;    // menu wants this to be an int, not a bool
-
-// ====== initialize key coloring routines
-
-  enum colors      { W,    R,    O,    Y,    L,    G,    C,    B,    I,    P,    M,
-                          r,    o,    y,    l,    g,    c,    b,    i,    p,    m     };
-  enum { DARK = 0, VeryDIM = 1, DIM = 32, BRIGHT = 127, VeryBRIGHT = 255 };
-  enum { GRAY = 0, DULL = 127, VIVID = 255 };
-  float hueCode[] = { 0.0, 0.0, 36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0,
-                           0.0, 36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0  };
-  byte satCode[] = { GRAY, VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID,VIVID, 
-                          DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL, DULL  };
-  byte colorMode = 1;
-  byte perceptual = 1;
-
-// ====== initialize note labels in each tuning, also used for key signature
-
-  typedef struct {
-    char* name;
-    byte tuning;
-    int8_t offset;      // steps from constant A4 to that key class 
-    colors tierColor;
-  } keyDef;
-  keyDef keyOptions[] = {
-    // 12 EDO, whole tone = 2, #/b = 1
-      { (char*)" C        (B#)", Twelve, -9, W },
-      { (char*)" C# / Db",       Twelve, -8, I },
-      { (char*)"      D",        Twelve, -7, W },
-      { (char*)"      D# / Eb",  Twelve, -6, I },
-      { (char*)"     (Fb)  E",   Twelve, -5, W },
-      { (char*)"      F   (E#)", Twelve, -4, W },
-      { (char*)" Gb / F#",       Twelve, -3, I },
-      { (char*)" G",             Twelve, -2, W },
-      { (char*)" G# / Ab",       Twelve, -1, I },
-      { (char*)"      A",        Twelve,  0, W },
-      { (char*)"      A# / Bb",  Twelve,  1, I },
-      { (char*)"(Cb)       B",   Twelve,  2, W },
-    // 17 EDO, whole tone = 3, #/b = 2, +/d = 1
-      { (char*)" C        (B+)", Seventeen,  -13, W },
-      { (char*)" C+ / Db / B#",  Seventeen,  -12, R },
-      { (char*)" C# / Dd",       Seventeen,  -11, I },
-      { (char*)"      D",        Seventeen,  -10, W },
-      { (char*)"      D+ / Eb",  Seventeen,   -9, R },
-      { (char*)" Fb / D# / Ed",  Seventeen,   -8, I },
-      { (char*)"(Fd)       E",   Seventeen,   -7, W },
-      { (char*)" F        (E+)", Seventeen,   -6, W },
-      { (char*)" F+ / Gb / E#",  Seventeen,   -5, R },
-      { (char*)" F# / Gd",       Seventeen,   -4, I },
-      { (char*)"      G",        Seventeen,   -3, W },
-      { (char*)"      G+ / Ab",  Seventeen,   -2, R },
-      { (char*)"      G# / Ad",  Seventeen,   -1, I },
-      { (char*)"           A",   Seventeen,    0, W },
-      { (char*)"      Bb / A+",  Seventeen,    1, R },
-      { (char*)" Cb / Bd / A#",  Seventeen,    2, I },
-      { (char*)"(Cd)  B"      ,  Seventeen,    3, W },
-    // 19 EDO, whole tone = 3, #/b = 1
-      { (char*)" C",       Nineteen, -14, W },
-      { (char*)" C#",      Nineteen, -13, R },
-      { (char*)" Db",      Nineteen, -12, I },
-      { (char*)" D",       Nineteen, -11, W },
-      { (char*)" D#",      Nineteen, -10, R },
-      { (char*)" Eb",      Nineteen,  -9, I },
-      { (char*)" E",       Nineteen,  -8, W },
-      { (char*)" E# / Fb", Nineteen,  -7, m },
-      { (char*)"      F",  Nineteen,  -6, W },
-      { (char*)"      F#", Nineteen,  -5, R },
-      { (char*)"      Gb", Nineteen,  -4, I },
-      { (char*)"      G",  Nineteen,  -3, W },
-      { (char*)"      G#", Nineteen,  -2, R },
-      { (char*)"      Ab", Nineteen,  -1, I },
-      { (char*)"      A",  Nineteen,   0, W },
-      { (char*)"      A#", Nineteen,   1, R },
-      { (char*)"      Bb", Nineteen,   2, I },
-      { (char*)"      B",  Nineteen,   3, W },
-      { (char*)" Cb / B#", Nineteen,   4, m },
-    // 22 EDO, whole tone = 4, #/b = 3, ^/v = 1
-      { (char*)"  C         (^B)", TwentyTwo, -17, W },
-      { (char*)" ^C  /  Db / vB#", TwentyTwo, -16, l },
-      { (char*)" vC# / ^Db /  B#", TwentyTwo, -15, C },
-      { (char*)"  C# / vD",        TwentyTwo, -14, i },
-      { (char*)"        D",        TwentyTwo, -13, W },
-      { (char*)"       ^D  /  Eb", TwentyTwo, -12, l },
-      { (char*)"  Fb / vD# / ^Eb", TwentyTwo, -11, C },
-      { (char*)" ^Fb /  D# / vE",  TwentyTwo, -10, i },
-      { (char*)"(vF)          E",  TwentyTwo,  -9, W },
-      { (char*)"  F         (^E)", TwentyTwo,  -8, W },
-      { (char*)" ^F  /  Gb / vE#", TwentyTwo,  -7, l },
-      { (char*)" vF# / ^Gb /  E#", TwentyTwo,  -6, C },
-      { (char*)"  F# / vG",        TwentyTwo,  -5, i },
-      { (char*)"        G",        TwentyTwo,  -4, W },
-      { (char*)"       ^G  /  Ab", TwentyTwo,  -3, l },
-      { (char*)"       vG# / ^Ab", TwentyTwo,  -2, C },
-      { (char*)"        G# / vA",  TwentyTwo,  -1, i },
-      { (char*)"              A",  TwentyTwo,   0, W },
-      { (char*)"        Bb / ^A",  TwentyTwo,   1, l },
-      { (char*)"  Cb / ^Bb / vA#", TwentyTwo,   2, C },
-      { (char*)" ^Cb / vB  /  A#", TwentyTwo,   3, i },
-      { (char*)"(vC)    B",        TwentyTwo,   4, W },
-    // 24 EDO, whole tone = 4, #/b = 2, +/d = 1
-      { (char*)" C  / B#", TwentyFour, -18, W },
-      { (char*)" C+",      TwentyFour, -17, r },
-      { (char*)" C# / Db", TwentyFour, -16, I },
-      { (char*)"      Dd", TwentyFour, -15, g },
-      { (char*)"      D",  TwentyFour, -14, W },
-      { (char*)"      D+", TwentyFour, -13, r },
-      { (char*)" Eb / D#", TwentyFour, -12, I },
-      { (char*)" Ed",      TwentyFour, -11, g },
-      { (char*)" E  / Fb", TwentyFour, -10, W },
-      { (char*)" E+ / Fd", TwentyFour,  -9, y },
-      { (char*)" E# / F",  TwentyFour,  -8, W },
-      { (char*)"      F+", TwentyFour,  -7, r },
-      { (char*)" Gb / F#", TwentyFour,  -6, I },
-      { (char*)" Gd",      TwentyFour,  -5, g },
-      { (char*)" G",       TwentyFour,  -4, W },
-      { (char*)" G+",      TwentyFour,  -3, r },
-      { (char*)" G# / Ab", TwentyFour,  -2, I },
-      { (char*)"      Ad", TwentyFour,  -1, g },
-      { (char*)"      A",  TwentyFour,   0, W },
-      { (char*)"      A+", TwentyFour,   1, r },
-      { (char*)" Bb / A#", TwentyFour,   2, I },
-      { (char*)" Bd",      TwentyFour,   3, g },
-      { (char*)" B  / Cb", TwentyFour,   4, W },
-      { (char*)" B+ / Cd", TwentyFour,   5, y },
-    // 31 EDO, whole tone = 5, #/b = 2, +/d = 1
-      { (char*)" C",       ThirtyOne, -23, W },
-      { (char*)" C+",      ThirtyOne, -22, R },
-      { (char*)" C#",      ThirtyOne, -21, Y },
-      { (char*)" Db",      ThirtyOne, -20, C },
-      { (char*)" Dd",      ThirtyOne, -19, I },
-      { (char*)" D",       ThirtyOne, -18, W },
-      { (char*)" D+",      ThirtyOne, -17, R },
-      { (char*)" D#",      ThirtyOne, -16, Y },
-      { (char*)" Eb",      ThirtyOne, -15, C },
-      { (char*)" Ed",      ThirtyOne, -14, I },
-      { (char*)" E",       ThirtyOne, -13, W },
-      { (char*)" E+ / Fb", ThirtyOne, -12, L },
-      { (char*)" E# / Fd", ThirtyOne, -11, M },
-      { (char*)"      F",  ThirtyOne, -10, W },
-      { (char*)"      F+", ThirtyOne,  -9, R },
-      { (char*)"      F#", ThirtyOne,  -8, Y },
-      { (char*)"      Gb", ThirtyOne,  -7, C },
-      { (char*)"      Gd", ThirtyOne,  -6, I },
-      { (char*)"      G",  ThirtyOne,  -5, W },
-      { (char*)"      G+", ThirtyOne,  -4, R },
-      { (char*)"      G#", ThirtyOne,  -3, Y },
-      { (char*)"      Ab", ThirtyOne,  -2, C },
-      { (char*)"      Ad", ThirtyOne,  -1, I },
-      { (char*)"      A",  ThirtyOne,   0, W },
-      { (char*)"      A+", ThirtyOne,   1, R },
-      { (char*)"      A#", ThirtyOne,   2, Y },
-      { (char*)"      Bb", ThirtyOne,   3, C },
-      { (char*)"      Bd", ThirtyOne,   4, I },
-      { (char*)"      B",  ThirtyOne,   5, W },
-      { (char*)" Cb / B+", ThirtyOne,   6, L },
-      { (char*)" Cd / B#", ThirtyOne,   7, M },
-    // 41 EDO, whole tone = 7, #/b = 4, +/d = 2, ^/v = 1
-      { (char*)"  C         (vB#)", FortyOne, -31, W },
-      { (char*)" ^C        /  B#",  FortyOne, -30, c },
-      { (char*)"  C+ ",             FortyOne, -29, O },
-      { (char*)" vC# /  Db",        FortyOne, -28, I },
-      { (char*)"  C# / ^Db",        FortyOne, -27, R },
-      { (char*)"        Dd",        FortyOne, -26, B },
-      { (char*)"       vD",         FortyOne, -25, y },
-      { (char*)"        D",         FortyOne, -24, W },
-      { (char*)"       ^D",         FortyOne, -23, c },
-      { (char*)"        D+",        FortyOne, -22, O },
-      { (char*)"       vD# /  Eb",  FortyOne, -21, I },
-      { (char*)"        D# / ^Eb",  FortyOne, -20, R },
-      { (char*)"              Ed",  FortyOne, -19, B },
-      { (char*)"             vE",   FortyOne, -18, y },
-      { (char*)"      (^Fb)   E",   FortyOne, -17, W },
-      { (char*)"        Fd / ^E",   FortyOne, -16, c },
-      { (char*)"       vF  /  E+",  FortyOne, -15, y },
-      { (char*)"        F   (vE#)", FortyOne, -14, W },
-      { (char*)"       ^F  /  E#",  FortyOne, -13, c },
-      { (char*)"        F+",        FortyOne, -12, O },
-      { (char*)"  Gb / vF#",        FortyOne, -11, I },
-      { (char*)" ^Gb /  F#",        FortyOne, -10, R },
-      { (char*)"  Gd",              FortyOne,  -9, B },
-      { (char*)" vG",               FortyOne,  -8, y },
-      { (char*)"  G",               FortyOne,  -7, W },
-      { (char*)" ^G",               FortyOne,  -6, c },
-      { (char*)"  G+",              FortyOne,  -5, O },
-      { (char*)" vG# /  Ab",        FortyOne,  -4, I },
-      { (char*)"  G# / ^Ab",        FortyOne,  -3, R },
-      { (char*)"        Ad",        FortyOne,  -2, B },
-      { (char*)"       vA",         FortyOne,  -1, y },
-      { (char*)"        A",         FortyOne,   0, W },
-      { (char*)"       ^A",         FortyOne,   1, c },
-      { (char*)"        A+",        FortyOne,   2, O },
-      { (char*)"       vA# /  Bb",  FortyOne,   3, I },
-      { (char*)"        A# / ^Bb",  FortyOne,   4, R },
-      { (char*)"              Bd",  FortyOne,   5, B },
-      { (char*)"             vB",   FortyOne,   6, y },
-      { (char*)"      (^Cb)   B",   FortyOne,   7, W },
-      { (char*)"        Cd / ^B",   FortyOne,   8, c },
-      { (char*)"       vC  /  B+",  FortyOne,   9, y },
-    // 53 EDO, whole tone = 9, #/b = 5, >/< = 2, ^/v = 1
-      { (char*)"  C         (vB#)", FiftyThree, -40, W },
-      { (char*)" ^C     /     B#",  FiftyThree, -39, c },
-      { (char*)" >C  / <Db",        FiftyThree, -38, l },
-      { (char*)" <C# / vDb",        FiftyThree, -37, O },
-      { (char*)" vC# /  Db",        FiftyThree, -36, I },
-      { (char*)"  C# / ^Db",        FiftyThree, -35, R },
-      { (char*)" ^C# / >Db",        FiftyThree, -34, B },
-      { (char*)" >C# / <D",         FiftyThree, -33, g },
-      { (char*)"       vD",         FiftyThree, -32, y },
-      { (char*)"        D",         FiftyThree, -31, W },
-      { (char*)"       ^D",         FiftyThree, -30, c },
-      { (char*)"       >D  / <Eb",  FiftyThree, -29, l },
-      { (char*)"       <D# / vEb",  FiftyThree, -28, O },
-      { (char*)"       vD# /  Eb",  FiftyThree, -27, I },
-      { (char*)"        D# / ^Eb",  FiftyThree, -26, R },
-      { (char*)"       ^D# / >Eb",  FiftyThree, -25, B },
-      { (char*)"       >D# / <E",   FiftyThree, -24, g },
-      { (char*)"  Fb    /    vE",   FiftyThree, -23, y },
-      { (char*)"(^Fb)         E",   FiftyThree, -22, W },
-      { (char*)"(>Fb)        ^E",   FiftyThree, -21, c },
-      { (char*)" <F     /    >E",   FiftyThree, -20, G },
-      { (char*)" vF         (<E#)", FiftyThree, -19, y },
-      { (char*)"  F         (vE#)", FiftyThree, -18, W },
-      { (char*)" ^F     /     E#",  FiftyThree, -17, c },
-      { (char*)" >F  / <Gb",        FiftyThree, -16, l },
-      { (char*)" <F# / vGb",        FiftyThree, -15, O },
-      { (char*)" vF# /  Gb",        FiftyThree, -14, I },
-      { (char*)"  F# / ^Gb",        FiftyThree, -13, R },
-      { (char*)" ^F# / >Gb",        FiftyThree, -12, B },
-      { (char*)" >F# / <G",         FiftyThree, -11, g },
-      { (char*)"       vG",         FiftyThree, -10, y },
-      { (char*)"        G",         FiftyThree,  -9, W },
-      { (char*)"       ^G",         FiftyThree,  -8, c },
-      { (char*)"       >G  / <Ab",  FiftyThree,  -7, l },
-      { (char*)"       <G# / vAb",  FiftyThree,  -6, O },
-      { (char*)"       vG# /  Ab",  FiftyThree,  -5, I },
-      { (char*)"        G# / ^Ab",  FiftyThree,  -4, R },
-      { (char*)"       ^G# / >Ab",  FiftyThree,  -3, B },
-      { (char*)"       >G# / <A",   FiftyThree,  -2, g },
-      { (char*)"             vA",   FiftyThree,  -1, y },
-      { (char*)"              A",   FiftyThree,   0, W },
-      { (char*)"             ^A",   FiftyThree,   1, c },
-      { (char*)"       <Bb / >A",   FiftyThree,   2, l },
-      { (char*)"       vBb / <A#",  FiftyThree,   3, O },
-      { (char*)"        Bb / vA#",  FiftyThree,   4, I },
-      { (char*)"       ^Bb /  A#",  FiftyThree,   5, R },
-      { (char*)"       >Bb / ^A#",  FiftyThree,   6, B },
-      { (char*)"       <B  / >A#",  FiftyThree,   7, g },
-      { (char*)"  Cb / vB",         FiftyThree,   8, y },
-      { (char*)"(^Cb)   B",         FiftyThree,   9, W },
-      { (char*)"(>Cb)  ^B",         FiftyThree,  10, c },
-      { (char*)" <C  / >B",         FiftyThree,  11, G },
-      { (char*)" vC   (<B#)",       FiftyThree,  12, y },
-    // 72 EDO, whole tone = 12, #/b = 6, +/d = 3, ^/v = 1
-      { (char*)"  C    (B#)", SeventyTwo, -54, W },
-      { (char*)" ^C",         SeventyTwo, -53, g },
-      { (char*)" vC+",        SeventyTwo, -52, r },
-      { (char*)"  C+",        SeventyTwo, -51, p },
-      { (char*)" ^C+",        SeventyTwo, -50, b },
-      { (char*)" vC#",        SeventyTwo, -49, y },
-      { (char*)"  C# /  Db",  SeventyTwo, -48, I },
-      { (char*)" ^C# / ^Db",  SeventyTwo, -47, g },
-      { (char*)"       vDd",  SeventyTwo, -46, r },
-      { (char*)"        Dd",  SeventyTwo, -45, p },
-      { (char*)"       ^Dd",  SeventyTwo, -44, b },
-      { (char*)"       vD",   SeventyTwo, -43, y },
-      { (char*)"        D",   SeventyTwo, -42, W },
-      { (char*)"       ^D",   SeventyTwo, -41, g },
-      { (char*)"       vD+",  SeventyTwo, -40, r },
-      { (char*)"        D+",  SeventyTwo, -39, p },
-      { (char*)"       ^D+",  SeventyTwo, -38, b },
-      { (char*)" vEb / vD#",  SeventyTwo, -37, y },
-      { (char*)"  Eb /  D#",  SeventyTwo, -36, I },
-      { (char*)" ^Eb / ^D#",  SeventyTwo, -35, g },
-      { (char*)" vEd",        SeventyTwo, -34, r },
-      { (char*)"  Ed",        SeventyTwo, -33, p },
-      { (char*)" ^Ed",        SeventyTwo, -32, b },
-      { (char*)" vE   (vFb)", SeventyTwo, -31, y },
-      { (char*)"  E    (Fb)", SeventyTwo, -30, W },
-      { (char*)" ^E   (^Fb)", SeventyTwo, -29, g },
-      { (char*)" vE+ / vFd",  SeventyTwo, -28, r },
-      { (char*)"  E+ /  Fd",  SeventyTwo, -27, p },
-      { (char*)" ^E+ / ^Fd",  SeventyTwo, -26, b },
-      { (char*)"(vE#)  vF",   SeventyTwo, -25, y },
-      { (char*)" (E#)   F",   SeventyTwo, -24, W },
-      { (char*)"(^E#)  ^F",   SeventyTwo, -23, g },
-      { (char*)"       vF+",  SeventyTwo, -22, r },
-      { (char*)"        F+",  SeventyTwo, -21, p },
-      { (char*)"       ^F+",  SeventyTwo, -20, b },
-      { (char*)" vGb / vF#",  SeventyTwo, -19, y },
-      { (char*)"  Gb /  F#",  SeventyTwo, -18, I },
-      { (char*)" ^Gb / ^F#",  SeventyTwo, -17, g },
-      { (char*)" vGd",        SeventyTwo, -16, r },
-      { (char*)"  Gd",        SeventyTwo, -15, p },
-      { (char*)" ^Gd",        SeventyTwo, -14, b },
-      { (char*)" vG",         SeventyTwo, -13, y },
-      { (char*)"  G",         SeventyTwo, -12, W },
-      { (char*)" ^G",         SeventyTwo, -11, g },
-      { (char*)" vG+",        SeventyTwo, -10, r },
-      { (char*)"  G+",        SeventyTwo,  -9, p },
-      { (char*)" ^G+",        SeventyTwo,  -8, b },
-      { (char*)" vG# / vAb",  SeventyTwo,  -7, y },
-      { (char*)"  G# /  Ab",  SeventyTwo,  -6, I },
-      { (char*)" ^G# / ^Ab",  SeventyTwo,  -5, g },
-      { (char*)"       vAd",  SeventyTwo,  -4, r },
-      { (char*)"        Ad",  SeventyTwo,  -3, p },
-      { (char*)"       ^Ad",  SeventyTwo,  -2, b },
-      { (char*)"       vA",   SeventyTwo,  -1, y },
-      { (char*)"        A",   SeventyTwo,   0, W },
-      { (char*)"       ^A",   SeventyTwo,   1, g },
-      { (char*)"       vA+",  SeventyTwo,   2, r },
-      { (char*)"        A+",  SeventyTwo,   3, p },
-      { (char*)"       ^A+",  SeventyTwo,   4, b },
-      { (char*)" vBb / vA#",  SeventyTwo,   5, y },
-      { (char*)"  Bb /  A#",  SeventyTwo,   6, I },
-      { (char*)" ^Bb / ^A#",  SeventyTwo,   7, g },
-      { (char*)" vBd",        SeventyTwo,   8, r },
-      { (char*)"  Bd",        SeventyTwo,   9, p },
-      { (char*)" ^Bd",        SeventyTwo,  10, b },
-      { (char*)" vB   (vCb)", SeventyTwo,  11, y },
-      { (char*)"  B    (Cb)", SeventyTwo,  12, W },
-      { (char*)" ^B   (^Cb)", SeventyTwo,  13, g },
-      { (char*)" vB+ / vCd",  SeventyTwo,  14, r },
-      { (char*)"  B+ /  Cd",  SeventyTwo,  15, p },
-      { (char*)" ^B+ / ^Cd",  SeventyTwo,  16, b },
-      { (char*)"(vB#)  vC",   SeventyTwo,  17, y },
-    //
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-      { (char*)"n/a",BohlenPierce,0,W},
-    //
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-      { (char*)"n/a",CarlosA,0,W},
-    //
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-      { (char*)"n/a",CarlosB,0,W},
-    //
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-      { (char*)"n/a",CarlosG,0,W},
-
-  };
-  const int keyCount = sizeof(keyOptions) / sizeof(keyDef);
-// ====== initialize structure to store and recall user preferences
-
-  typedef struct { // put all user-selectable options into a class so that down the line these can be saved and loaded.
-    char* presetName; 
-    int tuningIndex;     // instead of using pointers, i chose to store index value of each option, to be saved to a .pref or .ini or something
-    int layoutIndex;
-    int scaleIndex;
-    int keyIndex;
-    int transpose;
-    // define simple recall functions
-    tuningDef tuning() {
-      return tuningOptions[tuningIndex];
+  // Button matrix and LED locations (PROD unit only)
+    #define MPLEX_1_PIN 4
+    #define MPLEX_2_PIN 5
+    #define MPLEX_4_PIN 2
+    #define MPLEX_8_PIN 3
+    const byte mPin[] = { 
+      MPLEX_1_PIN, MPLEX_2_PIN, MPLEX_4_PIN, MPLEX_8_PIN 
     };
-    layoutDef layout() {
-      return layoutOptions[layoutIndex];
+    #define COLUMN_PIN_0 6
+    #define COLUMN_PIN_1 7
+    #define COLUMN_PIN_2 8
+    #define COLUMN_PIN_3 9
+    #define COLUMN_PIN_4 10
+    #define COLUMN_PIN_5 11
+    #define COLUMN_PIN_6 12
+    #define COLUMN_PIN_7 13
+    #define COLUMN_PIN_8 14
+    #define COLUMN_PIN_9 15
+    const byte cPin[] = { 
+      COLUMN_PIN_0, COLUMN_PIN_1, COLUMN_PIN_2, COLUMN_PIN_3,
+      COLUMN_PIN_4, COLUMN_PIN_5, COLUMN_PIN_6, 
+      COLUMN_PIN_7, COLUMN_PIN_8, COLUMN_PIN_9 
     };
-    scaleDef scale() {
-      return scaleOptions[scaleIndex];
+    #define COLCOUNT 10
+    #define ROWCOUNT 14
+  
+    // Since MIDI only uses 7 bits, we can give greater values special meanings.
+    // (see commandPress)
+    // start CMDB in a range that won't interfere with layouts.
+    #define CMDB 192
+    #define UNUSED_NOTE 255
+
+    // LED addresses for CMD buttons. (consequencely, also the button address too)
+    #define CMDBTN_0 0
+    #define CMDBTN_1 20
+    #define CMDBTN_2 40
+    #define CMDBTN_3 60
+    #define CMDBTN_4 80
+    #define CMDBTN_5 100
+    #define CMDBTN_6 120
+    const byte assignCmd[] = { 
+      CMDBTN_0, CMDBTN_1, CMDBTN_2, CMDBTN_3, 
+      CMDBTN_4, CMDBTN_5, CMDBTN_6
     };
-    keyDef key() {
-      return keyOptions[keyIndex];
-    };
-    int layoutsBegin() {
-      if (tuningIndex == Twelve) {
-        return 0;
-      } else {
-        int temp = 0;
-        while (layoutOptions[temp].tuning < tuningIndex) {
-          temp++;
+    #define CMDCOUNT 7
+
+  // MIDI note layout tables overhauled procedure since v1.1
+  // FIRST, some introductory declarations
+    typedef struct {  // defines the hex-grid coordinates using a double-offset system
+      int8_t row;
+      int8_t col;
+    } coordinates;    // probably could have done this as a std::pair, but was too lazy
+    
+    enum { 
+      Right, UpRight, UpLeft, Left, DnLeft, DnRight 
+    };        // the six cardinal directions on the hex grid are 0 thru 5, counter-clockwise
+
+    enum {
+      Twelve, Seventeen, Nineteen, TwentyTwo, 
+      TwentyFour, ThirtyOne, FortyOne, FiftyThree, 
+      SeventyTwo, BohlenPierce, 
+      CarlosA, CarlosB, CarlosG
+    };       // this is supposed to help with code legibility, weird as it looks.
+            // tuning # 0 is 12-EDO, so refer to that index 0 as "Twelve"
+            // then the next tuning #1 is 17-EDO so refer to index 1 as Seventeen, etc.
+
+  // SECOND, each button is an object, of type "buttonDef"
+    typedef struct {
+      byte keyState = 0;            // binary 00 = off, 01 = just pressed, 10 = just released, 11 = held
+      coordinates coords = {0,0};   // the hexagonal coordinates
+      uint32_t timePressed = 0;     // timecode of last press
+      uint32_t LEDcolorAnim = 0;    // calculate it once and store value, to make LED playback snappier 
+      uint32_t LEDcolorPlay = 0;    // calculate it once and store value, to make LED playback snappier
+      uint32_t LEDcolorOn = 0;      // calculate it once and store value, to make LED playback snappier
+      uint32_t LEDcolorOff = 0;     // calculate it once and store value, to make LED playback snappier
+      bool animate = 0;             // hex is flagged as part of the animation in this frame, helps make animations smoother
+      int16_t steps = 0;            // number of steps from key center (semitones in 12EDO; microtones if >12EDO)
+      bool isCmd = 0;               // 0 if it's a MIDI note; 1 if it's a MIDI control cmd
+      bool inScale = 0;             // 0 if it's not in the selected scale; 1 if it is
+      byte note = UNUSED_NOTE;      // MIDI note or control parameter corresponding to this hex
+      int16_t bend;                 // in microtonal mode, the pitch bend for this note needed to be tuned correctly
+      byte channel;                 // what MIDI channel this note is playing on
+      float frequency;              // what frequency to ring on the buzzer
+      void updateKeyState(bool keyPressed) {
+        keyState = (((keyState << 1) + keyPressed) & 3);
+        if (keyState == 1) {
+          timePressed = millis();   // log the time
         };
-        return temp;
       };
-    };
-    int keysBegin() {
-      if (tuningIndex == Twelve) {
-        return 0;
-      } else {
-        int temp = 0;
-        while (keyOptions[temp].tuning < tuningIndex) {
-          temp++;
+      uint32_t animFrame() {     
+        if (timePressed) {          // 2^10 milliseconds is close enough to 1 second
+          return 1 + (((runTime - timePressed) * animationFPS) >> 10);
+        } else {
+          return 0;
         };
-        return temp;
       };
+    } buttonDef;                    // a better C++ programmer than me would turn this into some
+                                    // fancy class definition in a header. i'm not that programmer!
+
+    buttonDef h[LED_COUNT];         // a collection of all the buttons from 0 to 139
+                                    // h[i] refers to the button with the LED address = i.
+
+  // THIRD, each layout can be built on the fly. used to be done
+    // separately in the ./makeLayout.py script, but not anymore.
+    // with the introduction of microtonal tunings, note that each tuning
+    // has its own list of layouts that are useful in that tuning.
+
+    typedef struct {
+      std::string name;
+      bool isPortrait;
+      byte rootHex;        // instead of "what note is button 1", "what button is the middle"
+      int8_t acrossSteps;  // defined this way to be compatible with original v1.1 firmare
+      int8_t dnLeftSteps;  // defined this way to be compatible with original v1.1 firmare
+      byte tuning;
+    } layoutDef;
+
+    layoutDef layoutOptions[] = {
+      { "Wicki-Hayden",      1, 64,   2,  -7, Twelve       },
+      { "Harmonic Table",    0, 75,  -7,   3, Twelve       },
+      { "Janko",             0, 65,  -1,  -1, Twelve       },
+      { "Gerhard",           0, 65,  -1,  -3, Twelve       },
+      { "Accordion C-sys.",  1, 75,   2,  -3, Twelve       },
+      { "Accordion B-sys.",  1, 64,   1,  -3, Twelve       },
+      { "Full Layout",       1, 65,  -1,  -9, Twelve       },
+      { "Bosanquet, 17",     0, 65,  -2,  -1, Seventeen    },
+      { "Full Layout",       1, 65,  -1,  -9, Seventeen    },
+      { "Bosanquet, 19",     0, 65,  -1,  -2, Nineteen     },
+      { "Full Layout",       1, 65,  -1,  -9, Nineteen     },
+      { "Bosanquet, 22",     0, 65,  -3,  -1, TwentyTwo    },
+      { "Full Layout",       1, 65,  -1,  -9, TwentyTwo    },
+      { "Bosanquet, 24",     0, 65,  -1,  -3, TwentyFour   },
+      { "Full Layout",       1, 65,  -1,  -9, TwentyFour   },
+      { "Bosanquet, 31",     0, 65,  -2,  -3, ThirtyOne    },
+      { "Full Layout",       1, 65,  -1,  -9, ThirtyOne    },
+      { "Bosanquet, 41",     0, 65,  -4,  -3, FortyOne     },  // forty-one #1
+      { "Gerhard, 41",       0, 65,   3, -10, FortyOne     },  // forty-one #2
+      { "Full Layout, 41",   0, 65,  -1,  -8, FortyOne     },  // forty-one #3
+      { "Wicki-Hayden, 53",  1, 64,   9, -31, FiftyThree   },
+      { "Harmonic Tbl, 53",  0, 75, -31,  14, FiftyThree   },
+      { "Bosanquet, 53",     0, 65,  -5,  -4, FiftyThree   },
+      { "Full Layout, 53",   0, 65,  -1,  -9, FiftyThree   },
+      { "Full Layout, 72",   0, 65,  -1,  -9, SeventyTwo   },
+      { "Full Layout",       1, 65,  -1,  -9, BohlenPierce },
+      { "Full Layout",       1, 65,  -1,  -9, CarlosA      },
+      { "Full Layout",       1, 65,  -1,  -9, CarlosB      },
+      { "Full Layout",       1, 65,  -1,  -9, CarlosG      }
     };
-    int findC() {
-      return keyOptions[keysBegin()].offset;
+    const byte layoutCount = sizeof(layoutOptions) / sizeof(layoutDef);
+
+  // FOURTH, since we updated routine for the piezo buzzer
+    // we no longer rely on the Arduino tone() function.
+    // instead we wrote our own pulse generator using the
+    // system clock, and can pass precise frequencies
+    // up to ~12kHz. the exact frequency of each button
+    // depends on the tuning system, defined in the struct below.
+
+    typedef struct {
+      std::string name;
+      byte cycleLength; // steps before repeat
+      float stepSize;   // in cents, 100 = "normal" semitone.
+    } tuningDef;
+
+    tuningDef tuningOptions[] = {
+      // replaces the idea of const byte EDO[] = { 12, 17, 19, 22, 24, 31, 41, 53, 72 };
+      { "12 EDO",           12,  100.0 },
+      { "17 EDO",           17, 1200.0 / 17 },
+      { "19 EDO",           19, 1200.0 / 19 },
+      { "22 EDO",           22, 1200.0 / 22 },
+      { "24 EDO",           24,   50.0 },
+      { "31 EDO",           31, 1200.0 / 31 },
+      { "41 EDO",           41, 1200.0 / 41 },
+      { "53 EDO",           53, 1200.0 / 53 },
+      { "72 EDO",           72,  100.0 / 6 },
+      { "Bohlen-Pierce",    13, 1901.955 / 13 }, //
+      { "Carlos Alpha",      9, 77.965 }, //
+      { "Carlos Beta",      11, 63.833 }, //
+      { "Carlos Gamma",     20, 35.099 }
     };
-  } presetDef;
-  presetDef current = {
-    (char*)"Default", 
-    Twelve,     // see the relevant enum{} statement
-    0,          // default to the first layout, wicki hayden
-    0,          // default to using no scale (chromatic)
-    0,          // default to the key of C
-    0           // default to no transposition
-  };
+    const byte tuningCount = sizeof(tuningOptions) / sizeof(tuningDef);
+
+    #define TONEPIN 23
+    #define TONE_SL 3
+    #define TONE_CH 1
+    #define WAVE_RESOLUTION 16
+    #define ALARM_NUM 2
+    #define ALARM_IRQ TIMER_IRQ_2
+
+    typedef struct {
+      std::string name;
+      byte lvl[WAVE_RESOLUTION];
+    } waveDef;
+    waveDef wf[] = { // from [0..129]
+      {"Square",  {0,0,0,0,0,0,0,0,129,129,129,129,129,129,129,129}},
+      {"Saw",  {0,9,17,26,34,43,52,60,69,77,86,95,103,112,120,129}},
+      {"3iangle",  {0,16,32,48,65,81,97,113,129,113,97,81,65,48,32,16}},
+      {"Sine",  {0,5,19,40,65,89,110,124,129,124,110,89,65,40,19,5}}
+    };
+    byte wfTick = 0;
+    byte wfLvl = 0;
+
+  // Tone and Arpeggiator variables
+    uint32_t microSecondsPerCycle = 1000000;
+    uint32_t microSecondsPerTick = microSecondsPerCycle / WAVE_RESOLUTION;
+    byte currentHexBuzzing = 255;         // if this is 255, buzzer set to off (0% duty cycle)
+    uint32_t currentBuzzTime = 0;         // Used to keep track of when this note started buzzin
+    uint32_t arpeggiateLength = 60;       //
+
+  // Pitch bend and mod wheel variables overhauled to use an internal emulation structure as follows
+    const uint16_t ccMsgCoolDown = 32; // milliseconds between steps
+    typedef struct {
+      byte* topBtn;
+      byte* midBtn;
+      byte* botBtn;
+      int16_t minValue;
+      int16_t maxValue;
+      uint16_t stepValue;
+      int16_t defValue;
+      int16_t curValue;
+      int16_t targetValue;
+      uint32_t timeLastChanged;
+      void setTargetValue() {
+        if (*midBtn >> 1) { // middle button toggles target (0) vs. step (1) mode
+          int16_t temp = curValue;
+              if (*topBtn == 1)     {temp += stepValue;};
+              if (*botBtn == 1)     {temp -= stepValue;};
+              if (temp > maxValue)  {temp  = maxValue;} 
+          else if (temp <= minValue) {temp  = minValue;};
+          targetValue = temp;
+        } else {
+          switch (((*topBtn >> 1) << 1) + (*botBtn >> 1)) {
+            case 0b10:   targetValue = maxValue;     break;
+            case 0b11:   targetValue = defValue;     break;
+            case 0b01:   targetValue = minValue;     break;
+            default:     targetValue = curValue;     break;
+          };
+        };
+      };
+      bool updateValue() {
+        int16_t temp = targetValue - curValue;
+        if (temp != 0) {
+          if ((runTime - timeLastChanged) >= ccMsgCoolDown) {
+            timeLastChanged = runTime;
+            if (abs(temp) < stepValue) {
+              curValue = targetValue;
+            } else {
+              curValue = curValue + (stepValue * (temp / abs(temp)));
+            };
+            return 1;
+          } else {
+            return 0;
+          };
+        } else {
+          return 0;
+        };
+      };   
+    } wheelDef;
+    wheelDef modWheel = {
+      &h[assignCmd[4]].keyState,
+      &h[assignCmd[5]].keyState,
+      &h[assignCmd[6]].keyState,
+      0, 127, 8,
+      0, 0, 0
+    }; 
+    wheelDef pbWheel =  {
+      &h[assignCmd[4]].keyState,
+      &h[assignCmd[5]].keyState,
+      &h[assignCmd[6]].keyState,
+      -8192, 8192, 1024,
+      0, 0, 0
+    };
+    wheelDef velWheel = {
+      &h[assignCmd[0]].keyState,
+      &h[assignCmd[1]].keyState,
+      &h[assignCmd[2]].keyState,
+      0, 127, 8,  
+      96, 96, 96
+    };
+    bool toggleWheel = 0; // 0 for mod, 1 for pb
+
+  /* Sequencer mode has not yet been restored
+
+    // Variables for sequencer mode
+    // Sequencer mode probably needs some love before it will be useful/usable.
+    // The device is held vertically, and two rows create a "lane".
+    // the first 8 buttons from each row are the steps (giving you 4 measures with quarter-note precision)
+    // The extra 3 (4?) buttons are for bank switching, muting, and solo-ing
+    typedef struct {
+      // The first 16 are for bank 0, and the second 16 are for bank 1.
+      bool steps[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+      bool bank = 0;
+      int state = 0;  // TODO: change to enum: normal, mute, solo, mute&solo
+      int instrument = 0; // What midi note this lane will send to the computer.
+    } Lane;
+    #define STATE_MUTE 1
+    #define STATE_SOLO 2
+
+    #define NLANES 7
+    Lane lanes[NLANES];
+
+    int sequencerStep = 0;  // 0 - 31
+
+    // You have to push a button to switch modes
+    bool sequencerMode = 0;
+
+    // THESE CAN BE USED TO RESET THE SEQUENCE POSITION
+    // void handleStart(void);
+    // void handleContinue(void);
+    // void handleStop(void);
+
+    // THIS WILL BE USED FOR THE SEQUENCER CLOCK (24 frames per quarter note)
+    // void handleTimeCodeQuarterFrame(byte data);
+    // We should be able to adjust the division in the menu to have different sequence speeds.
+
+    void handleNoteOn(byte channel, byte pitch, byte velocity) {
+      // Rosegarden sends its metronome this way. Using for testing...
+      if (1 == sequencerMode && 10 == channel && 100 == pitch) {
+        sequencerPlayNextNote();
+      }
+    }
+
+    */
+
+  // ====== initialize list of supported scales / modes / raga / maqam
+
+    typedef struct {
+      std::string name;
+      byte tuning;
+      byte step[16]; // 16 bytes = 128 bits, 1 = in scale; 0 = not
+    } scaleDef;
+    scaleDef scaleOptions[] = {
+      { "None",              255,        { 255,        255,         255,255,255,255,255,255,255,255,255,255,255,255,255,255} },
+      { "Major",             Twelve,     { 0b10101101, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Minor, natural",    Twelve,     { 0b10110101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Minor, melodic",    Twelve,     { 0b10110101, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Minor, harmonic",   Twelve,     { 0b10110101, 0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Pentatonic, major", Twelve,     { 0b10101001, 0b0100'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Pentatonic, minor", Twelve,     { 0b10010101, 0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Blues",             Twelve,     { 0b10010111, 0b0010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Double Harmonic",   Twelve,     { 0b11001101, 0b1001'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Phrygian",          Twelve,     { 0b11010101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Phrygian Dominant", Twelve,     { 0b11001101, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Dorian",            Twelve,     { 0b10110101, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Lydian",            Twelve,     { 0b10101011, 0b0101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Lydian Dominant",   Twelve,     { 0b10101011, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Mixolydian",        Twelve,     { 0b10101101, 0b0110'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Locrian",           Twelve,     { 0b11010110, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Whole tone",        Twelve,     { 0b10101010, 0b1010'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Octatonic",         Twelve,     { 0b10110110, 0b1101'0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Rast maqam",        TwentyFour, { 0b10001001, 0b00100010, 0b00101100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+      { "Rast makam",        FiftyThree, { 0b10000000, 0b01000000, 0b01000010, 0b00000001,
+                                                  0b00000000, 0b10001000, 0b10000'000, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+    };
+    const byte scaleCount = sizeof(scaleOptions) / sizeof(scaleDef);
+
+  // ====== initialize key notation and coloring routines
+
+    enum { DARK = 0, VeryDIM = 1, DIM = 32, BRIGHT = 127, VeryBRIGHT = 255 };
+    enum { GRAY = 0, DULL = 127, VIVID = 255 };
+    enum colors       { W,    R,    O,    Y,    L,     G,     C,     B,     I,     P,     M,
+                              r,    o,    y,    l,     g,     c,     b,     i,     p,     m     };
+    float hueCode[] = { 0.0,  0.0,  36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0,
+                              0.0,  36.0, 72.0, 108.0, 144.0, 180.0, 216.0, 252.0, 288.0, 324.0  };
+    byte satCode[] =  { GRAY, VIVID,VIVID,VIVID,VIVID, VIVID, VIVID, VIVID, VIVID, VIVID, VIVID, 
+                              DULL, DULL, DULL, DULL,  DULL,  DULL,  DULL,  DULL,  DULL,  DULL  };
+
+    typedef struct {
+      std::string name;
+      byte tuning;
+      int8_t offset;      // steps from constant A4 to that key class 
+      colors tierColor;
+    } keyDef;
+    keyDef keyOptions[] = {
+      // 12 EDO, whole tone = 2, #/b = 1
+        { " C        (B#)", Twelve, -9, W },
+        { " C# / Db",       Twelve, -8, i },
+        { "      D",        Twelve, -7, W },
+        { "      D# / Eb",  Twelve, -6, i },
+        { "     (Fb)  E",   Twelve, -5, W },
+        { "      F   (E#)", Twelve, -4, c },
+        { " Gb / F#",       Twelve, -3, I },
+        { " G",             Twelve, -2, c },
+        { " G# / Ab",       Twelve, -1, I },
+        { "      A",        Twelve,  0, c },
+        { "      A# / Bb",  Twelve,  1, I },
+        { "(Cb)       B",   Twelve,  2, c },
+      // 17 EDO, whole tone = 3, #/b = 2, +/d = 1
+        { " C        (B+)", Seventeen,  -13, W },
+        { " C+ / Db / B#",  Seventeen,  -12, R },
+        { " C# / Dd",       Seventeen,  -11, I },
+        { "      D",        Seventeen,  -10, W },
+        { "      D+ / Eb",  Seventeen,   -9, R },
+        { " Fb / D# / Ed",  Seventeen,   -8, I },
+        { "(Fd)       E",   Seventeen,   -7, W },
+        { " F        (E+)", Seventeen,   -6, W },
+        { " F+ / Gb / E#",  Seventeen,   -5, R },
+        { " F# / Gd",       Seventeen,   -4, I },
+        { "      G",        Seventeen,   -3, W },
+        { "      G+ / Ab",  Seventeen,   -2, R },
+        { "      G# / Ad",  Seventeen,   -1, I },
+        { "           A",   Seventeen,    0, W },
+        { "      Bb / A+",  Seventeen,    1, R },
+        { " Cb / Bd / A#",  Seventeen,    2, I },
+        { "(Cd)  B"      ,  Seventeen,    3, W },
+      // 19 EDO, whole tone = 3, #/b = 1
+        { " C",       Nineteen, -14, W },
+        { " C#",      Nineteen, -13, R },
+        { " Db",      Nineteen, -12, I },
+        { " D",       Nineteen, -11, W },
+        { " D#",      Nineteen, -10, R },
+        { " Eb",      Nineteen,  -9, I },
+        { " E",       Nineteen,  -8, W },
+        { " E# / Fb", Nineteen,  -7, m },
+        { "      F",  Nineteen,  -6, W },
+        { "      F#", Nineteen,  -5, R },
+        { "      Gb", Nineteen,  -4, I },
+        { "      G",  Nineteen,  -3, W },
+        { "      G#", Nineteen,  -2, R },
+        { "      Ab", Nineteen,  -1, I },
+        { "      A",  Nineteen,   0, W },
+        { "      A#", Nineteen,   1, R },
+        { "      Bb", Nineteen,   2, I },
+        { "      B",  Nineteen,   3, W },
+        { " Cb / B#", Nineteen,   4, m },
+      // 22 EDO, whole tone = 4, #/b = 3, ^/v = 1
+        { "  C         (^B)", TwentyTwo, -17, W },
+        { " ^C  /  Db / vB#", TwentyTwo, -16, l },
+        { " vC# / ^Db /  B#", TwentyTwo, -15, C },
+        { "  C# / vD",        TwentyTwo, -14, i },
+        { "        D",        TwentyTwo, -13, W },
+        { "       ^D  /  Eb", TwentyTwo, -12, l },
+        { "  Fb / vD# / ^Eb", TwentyTwo, -11, C },
+        { " ^Fb /  D# / vE",  TwentyTwo, -10, i },
+        { "(vF)          E",  TwentyTwo,  -9, W },
+        { "  F         (^E)", TwentyTwo,  -8, W },
+        { " ^F  /  Gb / vE#", TwentyTwo,  -7, l },
+        { " vF# / ^Gb /  E#", TwentyTwo,  -6, C },
+        { "  F# / vG",        TwentyTwo,  -5, i },
+        { "        G",        TwentyTwo,  -4, W },
+        { "       ^G  /  Ab", TwentyTwo,  -3, l },
+        { "       vG# / ^Ab", TwentyTwo,  -2, C },
+        { "        G# / vA",  TwentyTwo,  -1, i },
+        { "              A",  TwentyTwo,   0, W },
+        { "        Bb / ^A",  TwentyTwo,   1, l },
+        { "  Cb / ^Bb / vA#", TwentyTwo,   2, C },
+        { " ^Cb / vB  /  A#", TwentyTwo,   3, i },
+        { "(vC)    B",        TwentyTwo,   4, W },
+      // 24 EDO, whole tone = 4, #/b = 2, +/d = 1
+        { " C  / B#", TwentyFour, -18, W },
+        { " C+",      TwentyFour, -17, r },
+        { " C# / Db", TwentyFour, -16, I },
+        { "      Dd", TwentyFour, -15, g },
+        { "      D",  TwentyFour, -14, W },
+        { "      D+", TwentyFour, -13, r },
+        { " Eb / D#", TwentyFour, -12, I },
+        { " Ed",      TwentyFour, -11, g },
+        { " E  / Fb", TwentyFour, -10, W },
+        { " E+ / Fd", TwentyFour,  -9, y },
+        { " E# / F",  TwentyFour,  -8, W },
+        { "      F+", TwentyFour,  -7, r },
+        { " Gb / F#", TwentyFour,  -6, I },
+        { " Gd",      TwentyFour,  -5, g },
+        { " G",       TwentyFour,  -4, W },
+        { " G+",      TwentyFour,  -3, r },
+        { " G# / Ab", TwentyFour,  -2, I },
+        { "      Ad", TwentyFour,  -1, g },
+        { "      A",  TwentyFour,   0, W },
+        { "      A+", TwentyFour,   1, r },
+        { " Bb / A#", TwentyFour,   2, I },
+        { " Bd",      TwentyFour,   3, g },
+        { " B  / Cb", TwentyFour,   4, W },
+        { " B+ / Cd", TwentyFour,   5, y },
+      // 31 EDO, whole tone = 5, #/b = 2, +/d = 1
+        { " C",       ThirtyOne, -23, W },
+        { " C+",      ThirtyOne, -22, R },
+        { " C#",      ThirtyOne, -21, Y },
+        { " Db",      ThirtyOne, -20, C },
+        { " Dd",      ThirtyOne, -19, I },
+        { " D",       ThirtyOne, -18, W },
+        { " D+",      ThirtyOne, -17, R },
+        { " D#",      ThirtyOne, -16, Y },
+        { " Eb",      ThirtyOne, -15, C },
+        { " Ed",      ThirtyOne, -14, I },
+        { " E",       ThirtyOne, -13, W },
+        { " E+ / Fb", ThirtyOne, -12, L },
+        { " E# / Fd", ThirtyOne, -11, M },
+        { "      F",  ThirtyOne, -10, W },
+        { "      F+", ThirtyOne,  -9, R },
+        { "      F#", ThirtyOne,  -8, Y },
+        { "      Gb", ThirtyOne,  -7, C },
+        { "      Gd", ThirtyOne,  -6, I },
+        { "      G",  ThirtyOne,  -5, W },
+        { "      G+", ThirtyOne,  -4, R },
+        { "      G#", ThirtyOne,  -3, Y },
+        { "      Ab", ThirtyOne,  -2, C },
+        { "      Ad", ThirtyOne,  -1, I },
+        { "      A",  ThirtyOne,   0, W },
+        { "      A+", ThirtyOne,   1, R },
+        { "      A#", ThirtyOne,   2, Y },
+        { "      Bb", ThirtyOne,   3, C },
+        { "      Bd", ThirtyOne,   4, I },
+        { "      B",  ThirtyOne,   5, W },
+        { " Cb / B+", ThirtyOne,   6, L },
+        { " Cd / B#", ThirtyOne,   7, M },
+      // 41 EDO, whole tone = 7, #/b = 4, +/d = 2, ^/v = 1
+        { "  C         (vB#)", FortyOne, -31, W },
+        { " ^C        /  B#",  FortyOne, -30, c },
+        { "  C+ ",             FortyOne, -29, O },
+        { " vC# /  Db",        FortyOne, -28, I },
+        { "  C# / ^Db",        FortyOne, -27, R },
+        { "        Dd",        FortyOne, -26, B },
+        { "       vD",         FortyOne, -25, y },
+        { "        D",         FortyOne, -24, W },
+        { "       ^D",         FortyOne, -23, c },
+        { "        D+",        FortyOne, -22, O },
+        { "       vD# /  Eb",  FortyOne, -21, I },
+        { "        D# / ^Eb",  FortyOne, -20, R },
+        { "              Ed",  FortyOne, -19, B },
+        { "             vE",   FortyOne, -18, y },
+        { "      (^Fb)   E",   FortyOne, -17, W },
+        { "        Fd / ^E",   FortyOne, -16, c },
+        { "       vF  /  E+",  FortyOne, -15, y },
+        { "        F   (vE#)", FortyOne, -14, W },
+        { "       ^F  /  E#",  FortyOne, -13, c },
+        { "        F+",        FortyOne, -12, O },
+        { "  Gb / vF#",        FortyOne, -11, I },
+        { " ^Gb /  F#",        FortyOne, -10, R },
+        { "  Gd",              FortyOne,  -9, B },
+        { " vG",               FortyOne,  -8, y },
+        { "  G",               FortyOne,  -7, W },
+        { " ^G",               FortyOne,  -6, c },
+        { "  G+",              FortyOne,  -5, O },
+        { " vG# /  Ab",        FortyOne,  -4, I },
+        { "  G# / ^Ab",        FortyOne,  -3, R },
+        { "        Ad",        FortyOne,  -2, B },
+        { "       vA",         FortyOne,  -1, y },
+        { "        A",         FortyOne,   0, W },
+        { "       ^A",         FortyOne,   1, c },
+        { "        A+",        FortyOne,   2, O },
+        { "       vA# /  Bb",  FortyOne,   3, I },
+        { "        A# / ^Bb",  FortyOne,   4, R },
+        { "              Bd",  FortyOne,   5, B },
+        { "             vB",   FortyOne,   6, y },
+        { "      (^Cb)   B",   FortyOne,   7, W },
+        { "        Cd / ^B",   FortyOne,   8, c },
+        { "       vC  /  B+",  FortyOne,   9, y },
+      // 53 EDO, whole tone = 9, #/b = 5, >/< = 2, ^/v = 1
+        { "  C         (vB#)", FiftyThree, -40, W },
+        { " ^C     /     B#",  FiftyThree, -39, c },
+        { " >C  / <Db",        FiftyThree, -38, l },
+        { " <C# / vDb",        FiftyThree, -37, O },
+        { " vC# /  Db",        FiftyThree, -36, I },
+        { "  C# / ^Db",        FiftyThree, -35, R },
+        { " ^C# / >Db",        FiftyThree, -34, B },
+        { " >C# / <D",         FiftyThree, -33, g },
+        { "       vD",         FiftyThree, -32, y },
+        { "        D",         FiftyThree, -31, W },
+        { "       ^D",         FiftyThree, -30, c },
+        { "       >D  / <Eb",  FiftyThree, -29, l },
+        { "       <D# / vEb",  FiftyThree, -28, O },
+        { "       vD# /  Eb",  FiftyThree, -27, I },
+        { "        D# / ^Eb",  FiftyThree, -26, R },
+        { "       ^D# / >Eb",  FiftyThree, -25, B },
+        { "       >D# / <E",   FiftyThree, -24, g },
+        { "  Fb    /    vE",   FiftyThree, -23, y },
+        { "(^Fb)         E",   FiftyThree, -22, W },
+        { "(>Fb)        ^E",   FiftyThree, -21, c },
+        { " <F     /    >E",   FiftyThree, -20, G },
+        { " vF         (<E#)", FiftyThree, -19, y },
+        { "  F         (vE#)", FiftyThree, -18, W },
+        { " ^F     /     E#",  FiftyThree, -17, c },
+        { " >F  / <Gb",        FiftyThree, -16, l },
+        { " <F# / vGb",        FiftyThree, -15, O },
+        { " vF# /  Gb",        FiftyThree, -14, I },
+        { "  F# / ^Gb",        FiftyThree, -13, R },
+        { " ^F# / >Gb",        FiftyThree, -12, B },
+        { " >F# / <G",         FiftyThree, -11, g },
+        { "       vG",         FiftyThree, -10, y },
+        { "        G",         FiftyThree,  -9, W },
+        { "       ^G",         FiftyThree,  -8, c },
+        { "       >G  / <Ab",  FiftyThree,  -7, l },
+        { "       <G# / vAb",  FiftyThree,  -6, O },
+        { "       vG# /  Ab",  FiftyThree,  -5, I },
+        { "        G# / ^Ab",  FiftyThree,  -4, R },
+        { "       ^G# / >Ab",  FiftyThree,  -3, B },
+        { "       >G# / <A",   FiftyThree,  -2, g },
+        { "             vA",   FiftyThree,  -1, y },
+        { "              A",   FiftyThree,   0, W },
+        { "             ^A",   FiftyThree,   1, c },
+        { "       <Bb / >A",   FiftyThree,   2, l },
+        { "       vBb / <A#",  FiftyThree,   3, O },
+        { "        Bb / vA#",  FiftyThree,   4, I },
+        { "       ^Bb /  A#",  FiftyThree,   5, R },
+        { "       >Bb / ^A#",  FiftyThree,   6, B },
+        { "       <B  / >A#",  FiftyThree,   7, g },
+        { "  Cb / vB",         FiftyThree,   8, y },
+        { "(^Cb)   B",         FiftyThree,   9, W },
+        { "(>Cb)  ^B",         FiftyThree,  10, c },
+        { " <C  / >B",         FiftyThree,  11, G },
+        { " vC   (<B#)",       FiftyThree,  12, y },
+      // 72 EDO, whole tone = 12, #/b = 6, +/d = 3, ^/v = 1
+        { "  C    (B#)", SeventyTwo, -54, W },
+        { " ^C",         SeventyTwo, -53, g },
+        { " vC+",        SeventyTwo, -52, r },
+        { "  C+",        SeventyTwo, -51, p },
+        { " ^C+",        SeventyTwo, -50, b },
+        { " vC#",        SeventyTwo, -49, y },
+        { "  C# /  Db",  SeventyTwo, -48, I },
+        { " ^C# / ^Db",  SeventyTwo, -47, g },
+        { "       vDd",  SeventyTwo, -46, r },
+        { "        Dd",  SeventyTwo, -45, p },
+        { "       ^Dd",  SeventyTwo, -44, b },
+        { "       vD",   SeventyTwo, -43, y },
+        { "        D",   SeventyTwo, -42, W },
+        { "       ^D",   SeventyTwo, -41, g },
+        { "       vD+",  SeventyTwo, -40, r },
+        { "        D+",  SeventyTwo, -39, p },
+        { "       ^D+",  SeventyTwo, -38, b },
+        { " vEb / vD#",  SeventyTwo, -37, y },
+        { "  Eb /  D#",  SeventyTwo, -36, I },
+        { " ^Eb / ^D#",  SeventyTwo, -35, g },
+        { " vEd",        SeventyTwo, -34, r },
+        { "  Ed",        SeventyTwo, -33, p },
+        { " ^Ed",        SeventyTwo, -32, b },
+        { " vE   (vFb)", SeventyTwo, -31, y },
+        { "  E    (Fb)", SeventyTwo, -30, W },
+        { " ^E   (^Fb)", SeventyTwo, -29, g },
+        { " vE+ / vFd",  SeventyTwo, -28, r },
+        { "  E+ /  Fd",  SeventyTwo, -27, p },
+        { " ^E+ / ^Fd",  SeventyTwo, -26, b },
+        { "(vE#)  vF",   SeventyTwo, -25, y },
+        { " (E#)   F",   SeventyTwo, -24, W },
+        { "(^E#)  ^F",   SeventyTwo, -23, g },
+        { "       vF+",  SeventyTwo, -22, r },
+        { "        F+",  SeventyTwo, -21, p },
+        { "       ^F+",  SeventyTwo, -20, b },
+        { " vGb / vF#",  SeventyTwo, -19, y },
+        { "  Gb /  F#",  SeventyTwo, -18, I },
+        { " ^Gb / ^F#",  SeventyTwo, -17, g },
+        { " vGd",        SeventyTwo, -16, r },
+        { "  Gd",        SeventyTwo, -15, p },
+        { " ^Gd",        SeventyTwo, -14, b },
+        { " vG",         SeventyTwo, -13, y },
+        { "  G",         SeventyTwo, -12, W },
+        { " ^G",         SeventyTwo, -11, g },
+        { " vG+",        SeventyTwo, -10, r },
+        { "  G+",        SeventyTwo,  -9, p },
+        { " ^G+",        SeventyTwo,  -8, b },
+        { " vG# / vAb",  SeventyTwo,  -7, y },
+        { "  G# /  Ab",  SeventyTwo,  -6, I },
+        { " ^G# / ^Ab",  SeventyTwo,  -5, g },
+        { "       vAd",  SeventyTwo,  -4, r },
+        { "        Ad",  SeventyTwo,  -3, p },
+        { "       ^Ad",  SeventyTwo,  -2, b },
+        { "       vA",   SeventyTwo,  -1, y },
+        { "        A",   SeventyTwo,   0, W },
+        { "       ^A",   SeventyTwo,   1, g },
+        { "       vA+",  SeventyTwo,   2, r },
+        { "        A+",  SeventyTwo,   3, p },
+        { "       ^A+",  SeventyTwo,   4, b },
+        { " vBb / vA#",  SeventyTwo,   5, y },
+        { "  Bb /  A#",  SeventyTwo,   6, I },
+        { " ^Bb / ^A#",  SeventyTwo,   7, g },
+        { " vBd",        SeventyTwo,   8, r },
+        { "  Bd",        SeventyTwo,   9, p },
+        { " ^Bd",        SeventyTwo,  10, b },
+        { " vB   (vCb)", SeventyTwo,  11, y },
+        { "  B    (Cb)", SeventyTwo,  12, W },
+        { " ^B   (^Cb)", SeventyTwo,  13, g },
+        { " vB+ / vCd",  SeventyTwo,  14, r },
+        { "  B+ /  Cd",  SeventyTwo,  15, p },
+        { " ^B+ / ^Cd",  SeventyTwo,  16, b },
+        { "(vB#)  vC",   SeventyTwo,  17, y },
+      //
+        { "Note 0",BohlenPierce,0,W},
+        { "Note 1",BohlenPierce,1,Y},
+        { "Note 2",BohlenPierce,2,L},
+        { "Note 3",BohlenPierce,3,G},
+        { "Note 4",BohlenPierce,4,C},
+        { "Note 5",BohlenPierce,5,B},
+        { "Note 6",BohlenPierce,6,I},
+        { "Note 7",BohlenPierce,7,P},
+        { "Note 8",BohlenPierce,8,M},
+        { "Note 9",BohlenPierce,9,R},
+        { "Note 10",BohlenPierce,10,O},
+        { "Note 11",BohlenPierce,11,g},
+        { "Note 12",BohlenPierce,12,b},
+      //
+        { "Note 0",CarlosA,0,W},
+        { "Note 1",CarlosA,1,Y},
+        { "Note 2",CarlosA,2,G},
+        { "Note 3",CarlosA,3,B},
+        { "Note 4",CarlosA,4,P},
+        { "Note 5",CarlosA,5,R},
+        { "Note 6",CarlosA,6,c},
+        { "Note 7",CarlosA,7,l},
+        { "Note 8",CarlosA,8,m},
+      //
+        { "Note 0",CarlosB,0,W},
+        { "Note 1",CarlosB,1,Y},
+        { "Note 2",CarlosB,2,L},
+        { "Note 3",CarlosB,3,G},
+        { "Note 4",CarlosB,4,C},
+        { "Note 5",CarlosB,5,B},
+        { "Note 6",CarlosB,6,I},
+        { "Note 7",CarlosB,7,P},
+        { "Note 8",CarlosB,8,M},
+        { "Note 9",CarlosB,9,R},
+        { "Note 10",CarlosB,10,O},
+      //
+        { "Note 0",CarlosG,0,Y},
+        { "Note 1",CarlosG,1,y},
+        { "Note 2",CarlosG,2,L},
+        { "Note 3",CarlosG,3,l},
+        { "Note 4",CarlosG,4,G},
+        { "Note 5",CarlosG,5,g},
+        { "Note 6",CarlosG,6,C},
+        { "Note 7",CarlosG,7,c},
+        { "Note 8",CarlosG,8,B},
+        { "Note 9",CarlosG,9,b},
+        { "Note 10",CarlosG,10,I},
+        { "Note 11",CarlosG,11,i},
+        { "Note 12",CarlosG,12,P},
+        { "Note 13",CarlosG,13,p},
+        { "Note 14",CarlosG,14,M},
+        { "Note 15",CarlosG,15,m},
+        { "Note 16",CarlosG,16,R},
+        { "Note 17",CarlosG,17,r},
+        { "Note 18",CarlosG,18,O},
+        { "Note 19",CarlosG,19,o},
+
+    };
+    const int keyCount = sizeof(keyOptions) / sizeof(keyDef);
+
+  // MENU SYSTEM SETUP //
+    // Create menu page object of class GEMPage. Menu page holds menu items (GEMItem) and represents menu level.
+    // Menu can have multiple menu pages (linked to each other) with multiple menu items each
+
+    GEMPage  menuPageMain("HexBoard MIDI Controller");
+    GEMPage  menuPageTuning("Tuning");
+    GEMPage  menuPageLayout("Layout");
+    GEMPage  menuPageScales("Scales");
+    GEMPage  menuPageKeys("Keys");
+
+    GEMItem  menuGotoTuning("Tuning", menuPageTuning);
+    GEMItem* menuItemTuning[tuningCount]; // dynamically generate item based on tunings
+
+    GEMItem  menuGotoLayout("Layout", menuPageLayout); 
+    GEMItem* menuItemLayout[layoutCount]; // dynamically generate item based on presets
+
+    GEMItem  menuGotoScales("Scales", menuPageScales); 
+    GEMItem* menuItemScales[scaleCount];  // dynamically generate item based on presets and if allowed in given EDO tuning
+
+    GEMItem  menuGotoKeys("Keys",     menuPageKeys);
+    GEMItem* menuItemKeys[keyCount];   // dynamically generate item based on presets
+
+    byte scaleLock = 0;
+    byte perceptual = 1;
+    void resetHexLEDs();
+    byte enableMIDI = 1;
+    byte MPE = 0; // microtonal mode. if zero then attempt to self-manage multiple channels. 
+                  // if one then on certain synths that are MPE compatible will send in that mode.
+    void prepMIDIforMicrotones();
+    SelectOptionByte optionByteYesOrNo[] =  { { "No"     , 0 },       
+                                              { "Yes"    , 1 } };
+    GEMSelect selectYesOrNo( sizeof(optionByteYesOrNo)  / sizeof(SelectOptionByte), optionByteYesOrNo);
+    GEMItem  menuItemScaleLock( "Scale lock?",   scaleLock,     selectYesOrNo);
+    GEMItem  menuItemPercep(    "Fix color:",    perceptual,    selectYesOrNo, resetHexLEDs);
+    GEMItem  menuItemMIDI(      "Enable MIDI:",  enableMIDI,    selectYesOrNo);
+    GEMItem  menuItemMPE(       "MPE Mode:",     MPE,           selectYesOrNo, prepMIDIforMicrotones);
+
+    byte playbackMode = 2;
+    SelectOptionByte optionBytePlayback[] = { { "Off"    , 0 },
+                                              { "Mono"   , 1 }, 
+                                              { "Arp'gio", 2 } };
+    GEMSelect selectPlayback(sizeof(optionBytePlayback) / sizeof(SelectOptionByte), optionBytePlayback);
+    GEMItem  menuItemPlayback(  "Buzzer:",       playbackMode,  selectPlayback);
+
+    byte colorMode = 1;
+    SelectOptionByte optionByteColor[] =    { { "Rainbow", 0 },
+                                              { "Tiered" , 1 } };
+    GEMSelect selectColor(   sizeof(optionByteColor)    / sizeof(SelectOptionByte), optionByteColor);
+    GEMItem  menuItemColor(     "Color mode:",   colorMode,     selectColor,   resetHexLEDs);
+
+    enum { NoAnim, StarAnim, SplashAnim, OrbitAnim, OctaveAnim, NoteAnim };
+    byte animationType = NoAnim;
+    SelectOptionByte optionByteAnimate[] =  { { "None"   , NoAnim }, 
+                                              { "Octave" , OctaveAnim},   
+                                              { "By Note", NoteAnim},   
+                                              { "Star"   , StarAnim},   
+                                              { "Splash" , SplashAnim},   
+                                              { "Orbit"  , OrbitAnim} };
+    GEMSelect selectAnimate( sizeof(optionByteAnimate)  / sizeof(SelectOptionByte), optionByteAnimate);
+    GEMItem  menuItemAnimate(   "Animation:",    animationType, selectAnimate);
+
+    byte currWave = 0;
+    SelectOptionByte optionByteWaveform[] = { { wf[0].name.c_str(), 0 },
+                                              { wf[1].name.c_str(), 1 },
+                                              { wf[2].name.c_str(), 2 },
+                                              { wf[3].name.c_str(), 3 }  };
+    GEMSelect selectWaveform(sizeof(optionByteWaveform) / sizeof(SelectOptionByte), optionByteWaveform);
+    GEMItem  menuItemWaveform(  "Waveform:",     currWave,      selectWaveform);
+
+  // put all user-selectable options into a class so that down the line these can be saved and loaded.
+    typedef struct { 
+      std::string presetName; 
+      int tuningIndex;     // instead of using pointers, i chose to store index value of each option, to be saved to a .pref or .ini or something
+      int layoutIndex;
+      int scaleIndex;
+      int keyIndex;
+      int transpose;
+      // define simple recall functions
+      tuningDef tuning() {
+        return tuningOptions[tuningIndex];
+      };
+      layoutDef layout() {
+        return layoutOptions[layoutIndex];
+      };
+      scaleDef scale() {
+        return scaleOptions[scaleIndex];
+      };
+      keyDef key() {
+        return keyOptions[keyIndex];
+      };
+      int layoutsBegin() {
+        if (tuningIndex == Twelve) {
+          return 0;
+        } else {
+          int temp = 0;
+          while (layoutOptions[temp].tuning < tuningIndex) {
+            temp++;
+          };
+          return temp;
+        };
+      };
+      int keysBegin() {
+        if (tuningIndex == Twelve) {
+          return 0;
+        } else {
+          int temp = 0;
+          while (keyOptions[temp].tuning < tuningIndex) {
+            temp++;
+          };
+          return temp;
+        };
+      };
+      int findC() {
+        return keyOptions[keysBegin()].offset;
+      };
+    } presetDef;
+    presetDef current = {
+      "Default", 
+      Twelve,     // see the relevant enum{} statement
+      0,          // default to the first layout, wicki hayden
+      0,          // default to using no scale (chromatic)
+      0,          // default to the key of C
+      0           // default to no transposition
+    };
+
 // ====== functions
   byte byteLerp(byte xOne, byte xTwo, float yOne, float yTwo, float y) {
     float weight = (y - yOne) / (yTwo - yOne);
@@ -839,14 +1011,14 @@
     return 440.0 * exp2((MIDI - 69.0) / 12.0);
   }
   float stepsToMIDI(int16_t stepsFromA) {  // return the MIDI pitch associated
-    return freqToMIDI(concertA) + ((float)stepsFromA * (float)current.tuning().stepSize / 100.0);
+    return freqToMIDI(CONCERT_A_HZ) + ((float)stepsFromA * (float)current.tuning().stepSize / 100.0);
   }
 
 // ====== diagnostic wrapper
 
-  void sendToLog(String msg) {
+  void sendToLog(std::string msg) {
     if (diagnostics) {
-      Serial.println(msg);
+      Serial.println(msg.c_str());
     };
   }
 
@@ -872,7 +1044,7 @@
     float hueDegrees;
     byte sat;
     colors c;
-    for (byte i = 0; i < HEXCOUNT; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
       if (!(h[i].isCmd)) {
         byte scaleDegree = positiveMod(h[i].steps + current.key().offset - current.findC(),current.tuning().cycleLength);
         switch (colorMode) {
@@ -901,7 +1073,7 @@
 
   void assignPitches() {     // run this if the layout, key, or transposition changes, but not if color or scale changes
     sendToLog("assignPitch was called:");
-    for (byte i = 0; i < HEXCOUNT; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
       if (!(h[i].isCmd)) {
         float N = stepsToMIDI(h[i].steps + current.key().offset + current.transpose);
         if (N < 0 || N >= 128) {
@@ -910,38 +1082,38 @@
           h[i].frequency = 0.0;
         } else {
           h[i].note = ((N >= 127) ? 127 : round(N));
-          h[i].bend = (ldexp(N - h[i].note, 13) / defaultPBRange);
+          h[i].bend = (ldexp(N - h[i].note, 13) / PITCH_BEND_SEMIS);
           h[i].frequency = MIDItoFreq(N);
         };
-        sendToLog(String(
-          "hex #" + String(i) + ", " +
-          "steps=" + String(h[i].steps) + ", " +
-          "isCmd? " + String(h[i].isCmd) + ", " +
-          "note=" + String(h[i].note) + ", " + 
-          "bend=" + String(h[i].bend) + ", " + 
-          "freq=" + String(h[i].frequency) + ", " + 
-          "inScale? " + String(h[i].inScale) + "."
-        ));
+        sendToLog(
+          "hex #" + std::to_string(i) + ", " +
+          "steps=" + std::to_string(h[i].steps) + ", " +
+          "isCmd? " + std::to_string(h[i].isCmd) + ", " +
+          "note=" + std::to_string(h[i].note) + ", " + 
+          "bend=" + std::to_string(h[i].bend) + ", " + 
+          "freq=" + std::to_string(h[i].frequency) + ", " + 
+          "inScale? " + std::to_string(h[i].inScale) + "."
+        );
       };
     };
     sendToLog("assignPitches complete.");
   }
   void applyScale() {
     sendToLog("applyScale was called:");
-    for (byte i = 0; i < HEXCOUNT; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
       if (!(h[i].isCmd)) {
         byte degree = positiveMod(h[i].steps, current.tuning().cycleLength);
         byte whichByte = degree / 8;
         byte bitShift = 7 - (degree - (whichByte << 3));
         byte digitMask = 1 << bitShift;
         h[i].inScale = (current.scale().step[whichByte] & digitMask) >> bitShift;
-        sendToLog(String(
-          "hex #" + String(i) + ", " +
-          "steps=" + String(h[i].steps) + ", " +
-          "isCmd? " + String(h[i].isCmd) + ", " +
-          "note=" + String(h[i].note) + ", " + 
-          "inScale? " + String(h[i].inScale) + "."
-        ));
+        sendToLog(
+          "hex #" + std::to_string(i) + ", " +
+          "steps=" + std::to_string(h[i].steps) + ", " +
+          "isCmd? " + std::to_string(h[i].isCmd) + ", " +
+          "note=" + std::to_string(h[i].note) + ", " + 
+          "inScale? " + std::to_string(h[i].inScale) + "."
+        );
       };
     };
     resetHexLEDs();
@@ -949,7 +1121,7 @@
   }
   void applyLayout() {       // call this function when the layout changes
     sendToLog("buildLayout was called:");
-    for (byte i = 0; i < HEXCOUNT; i++) {
+    for (byte i = 0; i < LED_COUNT; i++) {
       if (!(h[i].isCmd)) {
         coordinates dist = hexDistance(h[current.layout().rootHex].coords, h[i].coords);
         h[i].steps = (
@@ -959,10 +1131,10 @@
             (2 * current.layout().dnLeftSteps)
           ))
         ) / 2;
-        sendToLog(String(
-          "hex #" + String(i) + ", " +
-          "steps=" + String(h[i].steps) + "."
-        ));
+        sendToLog(
+          "hex #" + std::to_string(i) + ", " +
+          "steps=" + std::to_string(h[i].steps) + "."
+        );
       };
     };
     applyScale();        // when layout changes, have to re-apply scale and re-apply LEDs
@@ -1010,18 +1182,18 @@
        + ((microSecondsPerCycle % WAVE_RESOLUTION) < wfTick)
       ;
     timer_hw->alarm[ALARM_NUM] = timer_hw->timerawl + microSecondsPerTick;
-    wfLvl = ((playbackMode && (currentHexBuzzing <= HEXCOUNT)) ? (wf[currWave].lvl[wfTick] * velWheel.curValue) >> 6 : 0);
+    wfLvl = ((playbackMode && (currentHexBuzzing <= LED_COUNT)) ? (wf[currWave].lvl[wfTick] * velWheel.curValue) >> 6 : 0);
     pwm_set_chan_level(TONE_SL, TONE_CH, wfLvl);
   }
   void buzz() {
-    if (playbackMode && (currentHexBuzzing <= HEXCOUNT)) {
-      microSecondsPerCycle = round(1000000 / (exp2(pbWheel.curValue * defaultPBRange / 98304.0) * h[currentHexBuzzing].frequency));
+    if (playbackMode && (currentHexBuzzing <= LED_COUNT)) {
+      microSecondsPerCycle = round(1000000 / (exp2(pbWheel.curValue * PITCH_BEND_SEMIS / 98304.0) * h[currentHexBuzzing].frequency));
     };
   }
   byte nextHeldNote() {
     byte n = 255;
-    for (byte i = 1; i < HEXCOUNT; i++) {
-      byte j = positiveMod(currentHexBuzzing + i, HEXCOUNT);
+    for (byte i = 1; i < LED_COUNT; i++) {
+      byte j = positiveMod(currentHexBuzzing + i, LED_COUNT);
       if ((h[j].channel) && (!h[j].isCmd)) {
         n = j;
         break;
@@ -1043,10 +1215,10 @@
       MIDI.beginRpn(0, Ch);
       MIDI.sendRpnValue(semitones << 7, Ch);
       MIDI.endRpn(Ch);
-      sendToLog(String(
+      sendToLog(
         "set pitch bend range on ch " +
-        String(Ch) + " to be " + String(semitones) + " semitones"
-      ));
+        std::to_string(Ch) + " to be " + std::to_string(semitones) + " semitones"
+      );
     }
   }
   void setMPEzone(byte masterCh, byte sizeOfZone) {
@@ -1054,10 +1226,10 @@
       MIDI.beginRpn(6, masterCh);
       MIDI.sendRpnValue(sizeOfZone << 7, masterCh);
       MIDI.endRpn(masterCh);
-      sendToLog(String(
+      sendToLog(
         "tried sending MIDI msg to set MPE zone, master ch " +
-        String(masterCh) + ", zone of this size: " + String(sizeOfZone)
-      ));
+        std::to_string(masterCh) + ", zone of this size: " + std::to_string(sizeOfZone)
+      );
     }
   }
   void prepMIDIforMicrotones() {
@@ -1067,48 +1239,48 @@
     setMPEzone(16, (5 * makeZone));  // MPE zone 16 = ch 11 thru 15 (or reset if not using MPE)
     delay(ccMsgCoolDown);
     for (byte i = 1; i <= 16; i++) {
-      setPitchBendRange(i, defaultPBRange);  // some synths try to set PB range to 48 semitones.
+      setPitchBendRange(i, PITCH_BEND_SEMIS);  // some synths try to set PB range to 48 semitones.
       delay(ccMsgCoolDown);                  // this forces it back to the expected range of 2 semitones.
       if ((i != 10) && ((!makeZone) || ((i > 1) && (i < 16)))) {
         openChannelQueue.push(i);
-        sendToLog(String("pushed ch " + String(i) + " to the open channel queue"));
+        sendToLog("pushed ch " + std::to_string(i) + " to the open channel queue");
       };
       channelBend[i - 1] = 0;
       channelPoly[i - 1] = 0;
     };
   }
   void chgModulation() {
-  if (enableMIDI) {     // MIDI mode only
-    if (current.tuningIndex == Twelve) {
+    if (enableMIDI) {     // MIDI mode only
+      if (current.tuningIndex == Twelve) {
         MIDI.sendControlChange(1, modWheel.curValue, 1);
-        sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 1"));
+        sendToLog("sent mod value " + std::to_string(modWheel.curValue) + " to ch 1");
       } else if (MPE) {
         MIDI.sendControlChange(1, modWheel.curValue, 1);
-        sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 1"));
+        sendToLog("sent mod value " + std::to_string(modWheel.curValue) + " to ch 1");
         MIDI.sendControlChange(1, modWheel.curValue, 16);
-        sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch 16"));
+        sendToLog("sent mod value " + std::to_string(modWheel.curValue) + " to ch 16");
       } else {
         for (byte i = 0; i < 16; i++) {
           MIDI.sendControlChange(1, modWheel.curValue, i + 1);
-          sendToLog(String("sent mod value " + String(modWheel.curValue) + " to ch " + String(i+1)));
+          sendToLog("sent mod value " + std::to_string(modWheel.curValue) + " to ch " + std::to_string(i+1));
         };
       };
-  };
+    };
   };
   void chgUniversalPB() {
     if (enableMIDI) {     // MIDI mode only
       if (current.tuningIndex == Twelve) {
         MIDI.sendPitchBend(pbWheel.curValue, 1);
-        sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 1"));
+        sendToLog("sent pb value " + std::to_string(pbWheel.curValue) + " to ch 1");
       } else if (MPE) {
         MIDI.sendPitchBend(pbWheel.curValue, 1);
-        sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 1"));
+        sendToLog("sent pb value " + std::to_string(pbWheel.curValue) + " to ch 1");
         MIDI.sendPitchBend(pbWheel.curValue, 16);
-        sendToLog(String("sent pb value " + String(pbWheel.curValue) + " to ch 16"));
+        sendToLog("sent pb value " + std::to_string(pbWheel.curValue) + " to ch 16");
       } else {
         for (byte i = 0; i < 16; i++) {
           MIDI.sendPitchBend(channelBend[i] + pbWheel.curValue, i + 1);
-          sendToLog(String("sent pb value " + String(channelBend[i] + pbWheel.curValue) + " to ch " + String(i+1)));
+          sendToLog("sent pb value " + std::to_string(channelBend[i] + pbWheel.curValue) + " to ch " + std::to_string(i+1));
         };
       };
     };
@@ -1121,17 +1293,17 @@
       for (byte c = MPE; c < (16 - MPE); c++) {  // MPE - look at ch 2 thru 15 [c 1-14]; otherwise ch 1 thru 16 [c 0-15]
         if ((c + 1 != 10) && (h[x].bend == channelBend[c])) {  // not using drum channel ch 10 in either case
           temp = c + 1;
-          sendToLog(String("found a matching channel: ch " + String(temp) + " has pitch bend " + String(channelBend[c])));
+          sendToLog("found a matching channel: ch " + std::to_string(temp) + " has pitch bend " + std::to_string(channelBend[c]));
           break;
         };
       };
       if (temp = 17) {
         if (openChannelQueue.empty()) {
-          sendToLog(String("channel queue was empty so we didn't send a note on"));
+          sendToLog("channel queue was empty so we didn't send a note on");
         } else {
           temp = openChannelQueue.front();
           openChannelQueue.pop();
-          sendToLog(String("popped " + String(temp) + " off the queue"));
+          sendToLog("popped " + std::to_string(temp) + " off the queue");
         };
       };
       return temp;
@@ -1154,12 +1326,12 @@
           MIDI.sendPitchBend(h[x].bend, c); // ch 1-16
         };
         MIDI.sendNoteOn(h[x].note, velWheel.curValue, c); // ch 1-16
-        sendToLog(String(
-          "sent note on: " + String(h[x].note) +
-          " pb " + String(h[x].bend) +
-          " vel " + String(velWheel.curValue) +
-          " ch " + String(c)
-        ));
+        sendToLog(
+          "sent note on: " + std::to_string(h[x].note) +
+          " pb " + std::to_string(h[x].bend) +
+          " vel " + std::to_string(velWheel.curValue) +
+          " ch " + std::to_string(c)
+        );
       };
     };
   }
@@ -1184,18 +1356,18 @@
         tryBuzzing(nextHeldNote());
       } else {
         MIDI.sendNoteOff(h[x].note, velWheel.curValue, c);
-        sendToLog(String(
-          "sent note off: " + String(h[x].note) +
-          " pb " + String(h[x].bend) +
-          " vel " + String(velWheel.curValue) +
-          " ch " + String(c)
-        ));
+        sendToLog(
+          "sent note off: " + std::to_string(h[x].note) +
+          " pb " + std::to_string(h[x].bend) +
+          " vel " + std::to_string(velWheel.curValue) +
+          " ch " + std::to_string(c)
+        );
       };
     };
   }
   void cmdOn(byte x) {   // volume and mod wheel read all current buttons
     switch (h[x].note) {
-      case cmdCode + 3:
+      case CMDB + 3:
         toggleWheel = !toggleWheel;
         // recolorHex(x);
         break;
@@ -1216,9 +1388,9 @@
     };
   }
   void animateMirror() {
-    for (byte i = 0; i < HEXCOUNT; i++) {                   // check every hex
+    for (byte i = 0; i < LED_COUNT; i++) {                   // check every hex
       if ((!(h[i].isCmd)) && (h[i].channel)) {              // that is a held note     
-        for (byte j = 0; j < HEXCOUNT; j++) {               // compare to every hex
+        for (byte j = 0; j < LED_COUNT; j++) {               // compare to every hex
           if ((!(h[j].isCmd)) && (!(h[j].channel))) {       // that is a note not being played
             int16_t temp = h[i].steps - h[j].steps;         // look at difference between notes
             if (animationType == OctaveAnim) {              // set octave diff to zero if need be
@@ -1233,14 +1405,14 @@
     };
   }
   void animateOrbit() {
-    for (byte i = 0; i < HEXCOUNT; i++) {                               // check every hex
+    for (byte i = 0; i < LED_COUNT; i++) {                               // check every hex
       if ((!(h[i].isCmd)) && (h[i].channel)) {                          // that is a held note     
         flagToAnimate(hexOffset(h[i].coords,hexVector((h[i].animFrame() % 6),1)));       // different neighbor each frame
       };
     };
   }
   void animateRadial() {
-    for (byte i = 0; i < HEXCOUNT; i++) {                               // check every hex
+    for (byte i = 0; i < LED_COUNT; i++) {                               // check every hex
       if (!(h[i].isCmd)) {                                               // that is a note
         uint32_t radius = h[i].animFrame();
         if ((radius > 0) && (radius < 16)) {                              // played in the last 16 frames
@@ -1257,61 +1429,7 @@
     };    
   }
 
-// ====== menu variables and routines
-
-  // must declare these variables globally for some reason
-  // doing so down here so we don't have to forward declare callback functions
-  //
-  SelectOptionByte optionByteYesOrNo[] =  { { "No"     , 0 },       
-                                            { "Yes"    , 1 } };
-  SelectOptionByte optionBytePlayback[] = { { "Off"    , 0 },
-                                            { "Mono"   , 1 }, 
-                                            { "Arp'gio", 2 } };
-  SelectOptionByte optionByteColor[] =    { { "Rainbow", 0 },
-                                            { "Tiered" , 1 } };
-  SelectOptionByte optionByteAnimate[] =  { { "None"   , NoAnim }, 
-                                            { "Octave" , OctaveAnim},   
-                                            { "By Note", NoteAnim},   
-                                            { "Star"   , StarAnim},   
-                                            { "Splash" , SplashAnim},   
-                                            { "Orbit"  , OrbitAnim} };
-  SelectOptionByte optionByteWaveform[] = { { wf[0].name, 0 },
-                                            { wf[1].name, 1 },
-                                            { wf[2].name, 2 },
-                                            { wf[3].name, 3 }  };
-
-  GEMSelect selectYesOrNo( sizeof(optionByteYesOrNo)  / sizeof(SelectOptionByte), optionByteYesOrNo);
-  GEMSelect selectPlayback(sizeof(optionBytePlayback) / sizeof(SelectOptionByte), optionBytePlayback);
-  GEMSelect selectColor(   sizeof(optionByteColor)    / sizeof(SelectOptionByte), optionByteColor);
-  GEMSelect selectAnimate( sizeof(optionByteAnimate)  / sizeof(SelectOptionByte), optionByteAnimate);
-  GEMSelect selectWaveform(sizeof(optionByteWaveform) / sizeof(SelectOptionByte), optionByteWaveform);
-
-  GEMPage  menuPageMain("HexBoard MIDI Controller");
-
-  GEMPage  menuPageTuning("Tuning");
-  GEMItem  menuGotoTuning("Tuning", menuPageTuning);
-  GEMItem* menuItemTuning[tuningCount]; // dynamically generate item based on tunings
-
-  GEMPage  menuPageLayout("Layout");
-  GEMItem  menuGotoLayout("Layout", menuPageLayout); 
-  GEMItem* menuItemLayout[layoutCount]; // dynamically generate item based on presets
-
-  GEMPage  menuPageScales("Scales");
-  GEMItem  menuGotoScales("Scales", menuPageScales); 
-  GEMItem* menuItemScales[scaleCount];  // dynamically generate item based on presets and if allowed in given EDO tuning
-
-  GEMPage  menuPageKeys("Keys");
-  GEMItem  menuGotoKeys("Keys",     menuPageKeys);
-  GEMItem* menuItemKeys[keyCount];   // dynamically generate item based on presets
-
-  GEMItem  menuItemScaleLock( "Scale lock?",   scaleLock,     selectYesOrNo);
-  GEMItem  menuItemPlayback(  "Buzzer:",       playbackMode,  selectPlayback);
-  GEMItem  menuItemWaveform(  "Waveform:",     currWave,      selectWaveform);
-  GEMItem  menuItemColor(     "Color mode:",   colorMode,     selectColor,   resetHexLEDs);
-  GEMItem  menuItemPercep(    "Fix color:",    perceptual,    selectYesOrNo, resetHexLEDs);
-  GEMItem  menuItemAnimate(   "Animation:",    animationType, selectAnimate);
-  GEMItem  menuItemMIDI(      "Enable MIDI:",  enableMIDI,    selectYesOrNo);
-  GEMItem  menuItemMPE(       "MPE Mode:",     MPE,           selectYesOrNo, prepMIDIforMicrotones);
+// ====== menu routines
 
   void menuHome() {
     menu.setMenuPageCurrent(menuPageMain);
@@ -1321,19 +1439,19 @@
     for (byte L = 0; L < layoutCount; L++) {
       menuItemLayout[L]->hide((layoutOptions[L].tuning != current.tuningIndex));
     };
-    sendToLog(String("menu: Layout choices were updated."));
+    sendToLog("menu: Layout choices were updated.");
   }
   void showOnlyValidScaleChoices() { // re-run at setup and whenever tuning changes
     for (int S = 0; S < scaleCount; S++) {
       menuItemScales[S]->hide((scaleOptions[S].tuning != current.tuningIndex) && (scaleOptions[S].tuning != 255));
     };
-    sendToLog(String("menu: Scale choices were updated."));
+    sendToLog("menu: Scale choices were updated.");
   }
   void showOnlyValidKeyChoices() { // re-run at setup and whenever tuning changes
     for (int K = 0; K < keyCount; K++) {
       menuItemKeys[K]->hide((keyOptions[K].tuning != current.tuningIndex));
     };
-    sendToLog(String("menu: Key choices were updated."));
+    sendToLog("menu: Key choices were updated.");
   }
   void changeLayout(GEMCallbackData callbackData) {  // when you change the layout via the menu
     byte selection = callbackData.valByte;
@@ -1377,30 +1495,29 @@
   void buildMenu() {
     menuPageMain.addMenuItem(menuGotoTuning);
     for (byte T = 0; T < tuningCount; T++) { // create pointers to all tuning choices
-      menuItemTuning[T] = new GEMItem(tuningOptions[T].name, changeTuning, T);
+      menuItemTuning[T] = new GEMItem(tuningOptions[T].name.c_str(), changeTuning, T);
       menuPageTuning.addMenuItem(*menuItemTuning[T]);
     };
 
     menuPageMain.addMenuItem(menuGotoLayout);
     for (byte L = 0; L < layoutCount; L++) { // create pointers to all layouts
-      menuItemLayout[L] = new GEMItem(layoutOptions[L].name, changeLayout, L);
+      menuItemLayout[L] = new GEMItem(layoutOptions[L].name.c_str(), changeLayout, L);
       menuPageLayout.addMenuItem(*menuItemLayout[L]);
     };
     showOnlyValidLayoutChoices();
 
     menuPageMain.addMenuItem(menuGotoScales);
     for (int S = 0; S < scaleCount; S++) {  // create pointers to all scale items, filter them as you go
-      menuItemScales[S] = new GEMItem(scaleOptions[S].name, changeScale, S);
+      menuItemScales[S] = new GEMItem(scaleOptions[S].name.c_str(), changeScale, S);
       menuPageScales.addMenuItem(*menuItemScales[S]);
     };
     showOnlyValidScaleChoices();
 
     menuPageMain.addMenuItem(menuGotoKeys);
     for (int K = 0; K < keyCount; K++) {
-      menuItemKeys[K] = new GEMItem(keyOptions[K].name, changeKey, K);
+      menuItemKeys[K] = new GEMItem(keyOptions[K].name.c_str(), changeKey, K);
       menuPageKeys.addMenuItem(*menuItemKeys[K]);
     };
-
     showOnlyValidKeyChoices();
 
     menuPageMain.addMenuItem(menuItemScaleLock);
@@ -1411,7 +1528,6 @@
     menuPageMain.addMenuItem(menuItemAnimate);
     menuPageMain.addMenuItem(menuItemPercep);
     menuPageMain.addMenuItem(menuItemMPE);
-
   }
 
 // ====== setup routines
@@ -1427,33 +1543,35 @@
     LittleFS.setConfig(cfg);
     LittleFS.begin();  // Mounts file system.
     if (!LittleFS.begin()) {
-      Serial.println("An Error has occurred while mounting LittleFS");
+      sendToLog("An Error has occurred while mounting LittleFS");
     }
   }
   void setupPins() {
-    for (byte p = 0; p < sizeof(columnPins); p++)  // For each column pin...
+    for (byte p = 0; p < sizeof(cPin); p++)  // For each column pin...
     {
-      pinMode(columnPins[p], INPUT_PULLUP);  // set the pinMode to INPUT_PULLUP (+3.3V / HIGH).
+      pinMode(cPin[p], INPUT_PULLUP);  // set the pinMode to INPUT_PULLUP (+3.3V / HIGH).
     }
-    for (byte p = 0; p < sizeof(multiplexPins); p++)  // For each column pin...
+    for (byte p = 0; p < sizeof(mPin); p++)  // For each column pin...
     {
-      pinMode(multiplexPins[p], OUTPUT);  // Setting the row multiplexer pins to output.
+      pinMode(mPin[p], OUTPUT);  // Setting the row multiplexer pins to output.
     }
     Wire.setSDA(SDAPIN);
     Wire.setSCL(SCLPIN);
-    pinMode(rotaryPinC, INPUT_PULLUP);
+    pinMode(ROT_PIN_C, INPUT_PULLUP);
   }
   void setupGrid() {
-    sendToLog(String("initializing hex grid..."));
-    for (byte i = 0; i < HEXCOUNT; i++) {
+    /*
+    sendToLog("initializing hex grid..."));
+    */
+    for (byte i = 0; i < LED_COUNT; i++) {
       h[i].coords = indexToCoord(i);
       h[i].isCmd = 0;
       h[i].note = 255;
       h[i].keyState = 0;
     };
-    for (byte c = 0; c < cmdCount; c++) {
+    for (byte c = 0; c < CMDCOUNT; c++) {
       h[assignCmd[c]].isCmd = 1;
-      h[assignCmd[c]].note = cmdCode + c;
+      h[assignCmd[c]].note = CMDB + c;
     };
     applyLayout();
   }
@@ -1474,7 +1592,9 @@
     u8g2.setContrast(defaultContrast);  // Set contrast
   }
   void testDiagnostics() {
-    sendToLog(String("theHDM was here"));
+    /*
+    sendToLog("theHDM was here"));
+    */
   }
   void setupPiezo() {
     gpio_set_function(TONEPIN, GPIO_FUNC_PWM);
@@ -1493,7 +1613,7 @@
 
   void timeTracker() {
     lapTime = runTime - loopTime;
-    // sendToLog(String(lapTime));  // Print out the time it takes to run each loop
+    // sendToLog(lapTime));  // Print out the time it takes to run each loop
     loopTime = runTime;  // Update previousTime variable to give us a reference point for next loop
     runTime = millis();   // Store the current time in a uniform variable for this program loop
   }
@@ -1514,10 +1634,10 @@
   void readHexes() {
     for (byte r = 0; r < ROWCOUNT; r++) {  // Iterate through each of the row pins on the multiplexing chip.
       for (byte d = 0; d < 4; d++) {
-        digitalWrite(multiplexPins[d], (r >> d) & 1);
+        digitalWrite(mPin[d], (r >> d) & 1);
       }
       for (byte c = 0; c < COLCOUNT; c++) {   // Now iterate through each of the column pins that are connected to the current row pin.
-        byte p = columnPins[c];               // Hold the currently selected column pin in a variable.
+        byte p = cPin[c];               // Hold the currently selected column pin in a variable.
         pinMode(p, INPUT_PULLUP);             // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
         delayMicroseconds(10);                // Delay to give the pin modes time to change state (false readings are caused otherwise).
         bool didYouPressHex = (digitalRead(p) == LOW);  // hex is pressed if it returns LOW. else not pressed
@@ -1527,7 +1647,7 @@
     }
   }
   void actionHexes() { 
-    for (byte i = 0; i < HEXCOUNT; i++) {   // For all buttons in the deck
+    for (byte i = 0; i < LED_COUNT; i++) {   // For all buttons in the deck
       switch (h[i].keyState) {
         case 1: // just pressed
           if (h[i].isCmd) {
@@ -1566,7 +1686,7 @@
     bool upd = velWheel.updateValue();
     if (upd) {
       buzz(); // update the volume live
-      sendToLog(String("vel became " + String(velWheel.curValue)));
+      sendToLog("vel became " + std::to_string(velWheel.curValue));
     }
     if (toggleWheel) {
       pbWheel.setTargetValue();
@@ -1584,7 +1704,7 @@
     };
   }
   void animateLEDs() {    // TBD  
-    for (byte i = 0; i < HEXCOUNT; i++) {      
+    for (byte i = 0; i < LED_COUNT; i++) {      
       h[i].animate = 0;
     };
     if (animationType) {
@@ -1604,7 +1724,7 @@
     };
   }
   void lightUpLEDs() {   
-    for (byte i = 0; i < HEXCOUNT; i++) {      
+    for (byte i = 0; i < LED_COUNT; i++) {      
       if (!(h[i].isCmd)) {
         if (h[i].animate) {
           strip.setPixelColor(i,h[i].LEDcolorAnim);
@@ -1662,7 +1782,7 @@
   }
   void dealWithRotary() {
     if (menu.readyForKey()) {
-      rotaryIsClicked = digitalRead(rotaryPinC);
+      rotaryIsClicked = digitalRead(ROT_PIN_C);
       if (rotaryIsClicked > rotaryWasClicked) {
         menu.registerKeyPress(GEM_KEY_OK);
         screenTime = 0;
@@ -1689,7 +1809,15 @@
         rotaryKnobTurns--;
         break;
     }
-    // rotaryKnobTurns = (rotaryKnobTurns > maxKnobTurns ? maxKnobTurns : (rotaryKnobTurns < -maxKnobTurns ? -maxKnobTurns : rotaryKnobTurns));
+    rotaryKnobTurns = (
+      rotaryKnobTurns > maxKnobTurns 
+      ? maxKnobTurns 
+      : (
+        rotaryKnobTurns < -maxKnobTurns 
+        ? -maxKnobTurns 
+        : rotaryKnobTurns
+      )
+    );
   }
 
 // ====== setup() and loop()
