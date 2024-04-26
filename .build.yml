@@ -5,7 +5,6 @@ packages:
   - make
   - git
 sources:
-  - https://git.sr.ht/~earboxer/HexBoard
   - https://github.com/buxtronix/arduino
 tasks:
   - libraries: |
@@ -16,13 +15,13 @@ tasks:
       arduino-cli lib install "MIDI library" "Adafruit NeoPixel" "U8g2" "Adafruit GFX Library" "GEM"
       sed -i 's@#include "config/enable-glcd.h"@//\0@g' ~/Arduino/libraries/GEM/src/config.h # remove dependency from GEM
       cd buxduino
-      git apply ../HexBoard/Rotary.patch
+      git apply ../Hex*/Rotary.patch
       cd ..
       mv buxduino/libraries/Rotary ~/Arduino/libraries/
   - build: |
-      cd HexBoard
+      cd Hex*
       make
-      mv build/build.ino.uf2 build/hexperiment.ino.uf2
-      sha256sum build/hexperiment.ino.uf2
+      mv build/build.ino.uf2 ../hexperiment.ino.uf2
+      sha256sum ../hexperiment.ino.uf2
 artifacts:
-  - HexBoard/build/hexperiment.ino.uf2
+  - hexperiment.ino.uf2
