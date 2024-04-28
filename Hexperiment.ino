@@ -1,10 +1,10 @@
 // ====== Hexperiment v1.2
   // Copyright 2022-2023 Jared DeCook and Zach DeCook
   // with help from Nicholas Fox
-  // Licensed under the GNU GPL Version 3.
   // Hardware Information:
-  // Generic RP2040 running at 133MHz with 16MB of flash
   // https://github.com/earlephilhower/arduino-pico
+  // Generic RP2040 running at 133MHz with 16MB of flash
+  // Licensed under the GNU GPL Version 3.
   // (Additional boards manager URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json)
   // Tools > USB Stack > (Adafruit TinyUSB)
   // Sketch > Export Compiled Binary
@@ -141,7 +141,7 @@
   #define VALUE_BLACK 0
   #define VALUE_LOW   127
   #define VALUE_SHADE 170
-  #define VALUE_NORMAL 212
+  #define VALUE_NORMAL 19
   #define VALUE_FULL  255
 
   // saturation ranges from 0..255
@@ -171,6 +171,7 @@
 
   #define RAINBOW_MODE 0
   #define TIERED_COLOR_MODE 1
+  #define ALTERNATE_COLOR_MODE 2
 
   // animations
   #define ANIMATE_NONE 0
@@ -566,58 +567,56 @@
     { "Gerhard",           0, 65,  -1,  -3, TUNING_12EDO },
     { "Accordion C-sys.",  1, 75,   2,  -3, TUNING_12EDO },
     { "Accordion B-sys.",  1, 64,   1,  -3, TUNING_12EDO },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_12EDO },
 
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_17EDO },
     { "Bosanquet-Wilson",  0, 65,  -2,  -1, TUNING_17EDO },
     { "Neutral Thirds A",  0, 65,  -1,  -2, TUNING_17EDO },
     { "Neutral Thirds B",  0, 65,   1,  -3, TUNING_17EDO },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_17EDO },
 
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_19EDO },
     { "Bosanquet-Wilson",  0, 65,  -1,  -2, TUNING_19EDO },
     { "Kleismic",          0, 65,  -1,  -4, TUNING_19EDO },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_19EDO },
-
+    
+    { "Full Gamut",        1, 65,   1,  -8, TUNING_22EDO },
     { "Bosanquet-Wilson",  0, 65,  -3,  -1, TUNING_22EDO },
     { "Porcupine",         0, 65,   1,  -4, TUNING_22EDO },
-    { "Full Gamut",        1, 65,   1,  -8, TUNING_22EDO },
-
+    
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_24EDO },
     { "Bosanquet-Wilson",  0, 65,  -1,  -3, TUNING_24EDO },
     { "Inverted",          0, 65,   1,  -4, TUNING_24EDO },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_24EDO },
-
+    
+    { "Full Gamut",        1, 65,   1,  -7, TUNING_31EDO },
     { "Bosanquet-Wilson",  0, 65,  -2,  -3, TUNING_31EDO },
     { "Double Bosanquet",  0, 65,  -1,  -4, TUNING_31EDO },
     { "Anti-Double Bos.",  0, 65,   1,  -5, TUNING_31EDO },
-    { "Full Gamut",        1, 65,  -1,  -7, TUNING_31EDO },
-
+    
+    { "Full Gamut",        0, 65,   1,  -8, TUNING_41EDO },  // forty-one #3
     { "Bosanquet-Wilson",  0, 65,  -4,  -3, TUNING_41EDO },  // forty-one #1
     { "Gerhard",           0, 65,   3, -10, TUNING_41EDO },  // forty-one #2
     { "Baldy",             0, 65,  -1,  -6, TUNING_41EDO },  
     { "Rodan",             1, 65,  -1,  -7, TUNING_41EDO },  
-    { "Full Gamut",        0, 65,  -1,  -8, TUNING_41EDO },  // forty-one #3
-
+    
+    { "Wicki-Hayden",      1, 64,   9, -31, TUNING_53EDO },
     { "Bosanquet-Wilson",  0, 65,  -5,  -4, TUNING_53EDO },
     { "Kleismic A",        0, 65,  -8,  -3, TUNING_53EDO },
     { "Kleismic B",        0, 65,  -5,  -3, TUNING_53EDO },
-    { "Wicki-Hayden",      1, 64,   9, -31, TUNING_53EDO },
     { "Harmonic Table",    0, 75, -31,  14, TUNING_53EDO },
     { "Buzzard",           0, 65,  -9,  -1, TUNING_53EDO },
-
-    { "Expanded Janko",    0, 65,  -1,  -6, TUNING_72EDO },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_72EDO },
-
-    { "Standard",          0, 65,  -2,  -1, TUNING_BP },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_BP },
-
-    { "Compressed",        0, 65,  -2,  -1, TUNING_ALPHA },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_ALPHA },
-
-    { "Compressed",        0, 65,  -2,  -1, TUNING_BETA },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_BETA },
-
-    { "Compressed",        0, 65,  -2,  -1, TUNING_GAMMA },
-    { "Full Gamut",        1, 65,  -1,  -9, TUNING_GAMMA }
     
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_72EDO },
+    { "Expanded Janko",    0, 65,  -1,  -6, TUNING_72EDO },
+    
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_BP },
+    { "Standard",          0, 65,  -2,  -1, TUNING_BP },
+    
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_ALPHA },
+    { "Compressed",        0, 65,  -2,  -1, TUNING_ALPHA },
+    
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_BETA },
+    { "Compressed",        0, 65,  -2,  -1, TUNING_BETA },
+    
+    { "Full Gamut",        1, 65,   1,  -9, TUNING_GAMMA },
+    { "Compressed",        0, 65,  -2,  -1, TUNING_GAMMA }    
   };
 
   scaleDef scaleOptions[] = {
@@ -667,7 +666,7 @@
     { "Diatonic Soft",     TUNING_24EDO, { 3,5,2,3,5,4,2 } },
     { "Diatonic Neutral",  TUNING_24EDO, { 4,3,3,4,3,4,3 } },
     { "Pentatonic (12)",   TUNING_24EDO, { 4,4,6,4,6 } },
-    { "Pentatonic (Hába)", TUNING_24EDO, { 5,5,5,5,4 } },
+    { "Pentatonic (Haba)", TUNING_24EDO, { 5,5,5,5,4 } },
     { "Invert Pentatonic", TUNING_24EDO, { 6,3,6,6,3 } },
     { "Rast maqam",        TUNING_24EDO, { 4,3,3,4,4,2,1,3 } },
     { "Bayati maqam",      TUNING_24EDO, { 3,3,4,4,2,1,3,4 } },      
@@ -698,13 +697,30 @@
     { "Diatonic",          TUNING_53EDO, { 9,9,4,9,9,9,4 } },
     { "Pentatonic",        TUNING_53EDO, { 9,9,13,9,13 } },
     { "Rast makam",        TUNING_53EDO, { 9,8,5,9,9,4,4,5 } },
+    { "Usshak makam",      TUNING_53EDO, { 7,6,9,9,4,4,5,9 } },
+    { "Hicaz makam",       TUNING_53EDO, { 5,12,5,9,4,9,9 } },
+    { "Orwell",            TUNING_53EDO, { 7,5,7,5,7,5,7,5,5 } },
+    { "Sephiroth",         TUNING_53EDO, { 6,5,5,6,5,5,6,5,5,5 } },
+    { "Smitonic",          TUNING_53EDO, { 11,11,3,11,3,11,3 } },
+    { "Slendric",          TUNING_53EDO, { 7,3,7,3,7,3,7,3,7,3,3 } },
+    { "Semiquartal",       TUNING_53EDO, { 9,2,9,2,9,2,9,2,9 } },
     // 72 EDO
     { "Diatonic",          TUNING_72EDO, { 12,12,6,12,12,12,6 } },
     { "Pentatonic",        TUNING_72EDO, { 12,12,18,12,18 } },
+    { "Ben Johnston",      TUNING_72EDO, { 6,6,6,5,5,5,9,8,4,4,7,7 } },
+    { "18-EDO",            TUNING_72EDO, { 4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 } },
+    { "Miracle",           TUNING_72EDO, { 5,2,5,2,5,2,2,5,2,5,2,5,2,5,2,5,2,5,2,5,2 } },
+    { "Marvolo",           TUNING_72EDO, { 5,5,5,5,5,5,5,2,5,5,5,5,5,5 } },
+    { "Catakleismic",      TUNING_72EDO, { 4,7,4,4,4,7,4,4,4,7,4,4,4,7,4 } },
+    { "Palace",            TUNING_72EDO, { 10,9,11,12,10,9,11 } },
     // BP
+    { "Lambda",            TUNING_BP, { 2,1,2,1,2,1,2,1,1 } },
     // Alpha
+    { "Super Meta Lydian", TUNING_ALPHA, { 3,2,2,2 } },
     // Beta
+    { "Super Meta Lydian", TUNING_BETA,  { 3,3,3,2 } },
     // Gamma
+    { "Super Meta Lydian", TUNING_GAMMA, { 6,5,5,4 } }
   };
 
   byte sine[] = {
@@ -788,7 +804,7 @@
     bool rotaryIsClicked = HIGH;          //
     bool rotaryWasClicked = HIGH;         //
     int8_t rotaryKnobTurns = 0;           //
-    byte maxKnobTurns = 3;
+    byte maxKnobTurns = 1;
 
   // Create an instance of the U8g2 graphics library.
     U8G2_SH1107_SEEED_128X128_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE);
@@ -947,8 +963,8 @@
     GEMSelect selectTransposeSteps( 255, optionIntTransposeSteps);
     GEMItem  menuItemTransposeSteps( "Transpose:",   transposeSteps,  selectTransposeSteps, changeTranspose);
     
-    byte colorMode = TIERED_COLOR_MODE;
-    SelectOptionByte optionByteColor[] =    { { "Rainbow", RAINBOW_MODE }, { "Tiered" , TIERED_COLOR_MODE } };
+    byte colorMode = RAINBOW_MODE;
+    SelectOptionByte optionByteColor[] =    { { "Rainbow", RAINBOW_MODE }, { "Tiered" , TIERED_COLOR_MODE }, {"Alt", ALTERNATE_COLOR_MODE} };
     GEMSelect selectColor( sizeof(optionByteColor) / sizeof(SelectOptionByte), optionByteColor);
     GEMItem  menuItemColor( "Color mode:", colorMode, selectColor, setLEDcolorCodes);
 
@@ -1075,12 +1091,33 @@
           case TIERED_COLOR_MODE:
             setColor = palette[current.tuningIndex].getColor(paletteIndex);
             break;
-          default:
+          case RAINBOW_MODE:
             setColor = 
               { 360.0 * ((float)paletteIndex / (float)current.tuning().cycleLength)
               , SAT_VIVID
               , VALUE_NORMAL
               };
+            break;
+          case ALTERNATE_COLOR_MODE:
+            float cents = current.tuning().stepSize * paletteIndex;
+            bool perf = 0;
+            float center = 0.0;
+                   if                    (cents <   50)  {perf = 1; center =    0.0;}
+              else if ((cents >=  50) && (cents <  250)) {          center =  147.1;}
+              else if ((cents >= 250) && (cents <  450)) {          center =  351.0;}
+              else if ((cents >= 450) && (cents <  600)) {perf = 1; center =  498.0;}
+              else if ((cents >= 600) && (cents <= 750)) {perf = 1; center =  702.0;}
+              else if ((cents >  750) && (cents <= 950)) {          center =  849.0;}
+              else if ((cents >  950) && (cents <=1150)) {          center = 1053.0;}
+              else if ((cents > 1150) && (cents < 1250)) {perf = 1; center = 1200.0;}
+              else if ((cents >=1250) && (cents < 1450)) {          center = 1347.1;}
+              else if ((cents >=1450) && (cents < 1650)) {          center = 1551.0;}
+              else if ((cents >=1650) && (cents < 1850)) {perf = 1; center = 1698.0;}
+              else if ((cents >=1800) && (cents <=1950)) {perf = 1; center = 1902.0;}
+            float offCenter = cents - center;
+            int16_t altHue = positiveMod((int)(150 + (perf * ((offCenter > 0) ? -72 : 72)) - round(1.44 * offCenter)), 360);
+            float deSaturate = perf * (abs(offCenter) < 20) * (1 - (0.02 * abs(offCenter)));
+            setColor = { (float)altHue, 255 - (255 * deSaturate), (cents ? VALUE_SHADE : VALUE_NORMAL) };
             break;
         }
         h[i].LEDcodeRest   = getLEDcode(setColor);
@@ -1350,11 +1387,44 @@
     synth[c - 1].increment = round(FwithPB * POLL_INTERVAL_IN_MICROSECONDS * 0.065536);   // cycle 0-65535 at resultant frequency
     synth[c - 1].eq = isoTwoTwentySix(FwithPB);
   }
+
   // USE THIS IN MONO OR ARPEG MODE ONLY
+
+  byte findNextHeldNote() {
+    byte n = UNUSED_NOTE;
+    for (byte i = 1; i <= LED_COUNT; i++) {
+      byte j = positiveMod(arpeggiatingNow + i, LED_COUNT);
+      if ((h[j].MIDIch) && (!h[j].isCmd)) {
+        n = j;
+        break;
+      }
+    }
+    return n;
+  }
   void replaceBuzzerWith(byte x) {
-    setBuzzer(0, 1);
-    arpeggiatingNow = x;
-    setBuzzer(h[arpeggiatingNow].frequency, 1);
+    if (arpeggiatingNow != x) {
+      arpeggiatingNow = x;
+      if (arpeggiatingNow != UNUSED_NOTE) {
+        setBuzzer(h[arpeggiatingNow].frequency, 1);
+      } else {
+        setBuzzer(0, 1);
+      }
+    }
+  }
+
+  void resetBuzzers() {
+    while (!buzzChQueue.empty()) {
+      buzzChQueue.pop();
+    }
+    for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
+      synth[i].increment = 0;
+      synth[i].counter = 0;
+    }
+    if (playbackMode == BUZZ_POLY) {
+      for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
+        buzzChQueue.push(i + 1);
+      }
+    }
   }
 // ====== MIDI routines
   void setPitchBendRange(byte Ch, byte semitones) {
@@ -1375,20 +1445,6 @@
       "tried sending MIDI msg to set MPE zone, master ch " +
       std::to_string(masterCh) + ", zone of this size: " + std::to_string(sizeOfZone)
     );
-  }
-  void resetBuzzers() {
-    while (!buzzChQueue.empty()) {
-      buzzChQueue.pop();
-    }
-    for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
-      synth[i].increment = 0;
-      synth[i].counter = 0;
-    }
-    if (playbackMode == BUZZ_POLY) {
-      for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
-        buzzChQueue.push(i + 1);
-      }
-    }
   }
   void resetTuningMIDI() {
     while (!MPEchQueue.empty()) {         // empty the channel queue
@@ -1473,8 +1529,6 @@
     }
   } 
   
-  // check - full death if over 8 poly.
-
   void stopNote(byte x) {
     // this gets called on any non-command hex
     // that is not scale-locked.
@@ -1491,9 +1545,8 @@
         sendToLog("pushed " + std::to_string(h[x].MIDIch) + " on the MPE queue");
       }
       h[x].MIDIch = 0;
-      if (!(playbackMode == BUZZ_OFF) && !(playbackMode == BUZZ_POLY)) {
-        setBuzzer(0, 1);
-        arpeggiateTime = 0;    // trigger arpeggiate function early if any note changes
+      if (playbackMode && (playbackMode != BUZZ_POLY)) {
+        replaceBuzzerWith(findNextHeldNote());
       }
     }
     if (playbackMode == BUZZ_POLY) {
@@ -1643,8 +1696,7 @@
       showOnlyValidScaleChoices();                         // change list of choices in GEM Menu
       showOnlyValidKeyChoices();                           // change list of choices in GEM Menu
       applyLayout();   // apply changes above
-      resetTuningMIDI
-  ();  // clear out MIDI queue
+      resetTuningMIDI();  // clear out MIDI queue
     }
     menuHome();
   }
@@ -1853,23 +1905,11 @@
       }
     }
   }
-
   void arpeggiate() {
     if (playbackMode == BUZZ_ARPEGGIO) {
       if (runTime - arpeggiateTime > arpeggiateLength) {
         arpeggiateTime = runTime;
-        byte n = UNUSED_NOTE;
-        for (byte i = 1; i < LED_COUNT; i++) {
-          byte j = positiveMod(arpeggiatingNow + i, LED_COUNT);
-          if ((h[j].MIDIch) && (!h[j].isCmd)) {
-            n = j;
-            break;
-          }
-        }
-        arpeggiatingNow = n;
-        if (n != UNUSED_NOTE) {
-          replaceBuzzerWith(n);
-        }
+        replaceBuzzerWith(findNextHeldNote());
       }
     }
   }
