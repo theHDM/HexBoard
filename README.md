@@ -26,9 +26,9 @@ The files are in the format `VX_Y_Z-model0.uf2`, where
 
 ## Hexperiment firmware
 
-Created by Nicholas Fox, sometimes available at https://git.sr.ht/~earboxer/Hexperiment
+Created by Nicholas Fox, sometimes available at https://github.com/theHDM/hexperiment or at https://git.sr.ht/~earboxer/HexBoard/tree/hexperiment
 
-[![Sourcehut Build status](https://builds.sr.ht/~earboxer/Hexperiment/commits/.svg)](https://builds.sr.ht/~earboxer/Hexperiment/commits/?)
+[![builds.sr.ht status](https://builds.sr.ht/~earboxer/HexBoard/commits/hexperiment.svg)](https://builds.sr.ht/~earboxer/HexBoard/commits/hexperiment?)
 
 ### Building the firmware
 
