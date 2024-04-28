@@ -141,7 +141,7 @@
   #define VALUE_BLACK 0
   #define VALUE_LOW   127
   #define VALUE_SHADE 170
-  #define VALUE_NORMAL 19
+  #define VALUE_NORMAL 192
   #define VALUE_FULL  255
 
   // saturation ranges from 0..255
