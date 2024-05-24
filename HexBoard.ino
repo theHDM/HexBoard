@@ -2,8 +2,8 @@
   /*
     HexBoard
     Copyright 2022-2023 Jared DeCook and Zach DeCook
-    with help from Nicholas Fox (he's too modest, this was a complete rewrite)
-    Firmware v1.0.0 2024-05-16
+    with help from Nicholas Fox
+    Firmware v1.0.0 2024-05-17
     Licensed under the GNU GPL Version 3.
 
     Hardware information:
@@ -61,7 +61,7 @@
     the code into a library at that point.
   */
 // @init
-  #define HARDWARE_VERSION 1      // 1 = v1.1 board. 2 = v1.2 board. (may not be necessary as there are detectable differences)
+  #define HARDWARE_VERSION 1      // 1 = v1.1 board. 2 = v1.2 board.
   #include <Arduino.h>            // this is necessary to talk to the Hexboard!
   #include <Wire.h>               // this is necessary to deal with the pins and wires
   #define SDAPIN 16
@@ -836,7 +836,7 @@
     optional sending of log messages
     to the Serial port
   */
-  #define DIAGNOSTICS_ON false 
+  #define DIAGNOSTICS_ON true 
   void sendToLog(std::string msg) {
     if (DIAGNOSTICS_ON) {
       Serial.println(msg.c_str());
