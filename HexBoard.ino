@@ -1643,7 +1643,7 @@
 
   byte arpeggiatingNow = UNUSED_NOTE;         // if this is 255, set to off (0% duty cycle)
   uint64_t arpeggiateTime = 0;                // Used to keep track of when this note started playing in ARPEG mode
-  uint64_t arpeggiateLength = 65'536;         // in microseconds. approx a 1/32 note at 114 BPM
+  uint64_t arpeggiateLength = 65536;         // in microseconds. approx a 1/32 note at 114 BPM
 
   // RUN ON CORE 2
   void poll() {
@@ -2535,8 +2535,10 @@
     the rotary knob and physical hex buttons.
 
     Documentation:
-      Rotary knob code:
+      Rotary knob code derived from:
         https://github.com/buxtronix/arduino/tree/master/libraries/Rotary
+    Copyright 2011 Ben Buxton. Licenced under the GNU GPL Version 3.
+    Contact: bb@cactii.net
 
     when the mechanical rotary knob is turned,
     the two pins go through a set sequence of
