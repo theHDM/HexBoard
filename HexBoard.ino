@@ -61,7 +61,6 @@
     the code into a library at that point.
   */
 // @init
-  #define HARDWARE_VERSION 1      // 1 = v1.1 board. 2 = v1.2 board.
   #include <Arduino.h>            // this is necessary to talk to the Hexboard!
   #include <Wire.h>               // this is necessary to deal with the pins and wires
   #define SDAPIN 16
@@ -70,6 +69,11 @@
   #include <numeric>              // need that GCD function, son
   #include <string>               // standard C++ library string classes (use "std::string" to invoke it); these do not cause the memory corruption that Arduino::String does.
   #include <queue>                // standard C++ library construction to store open channels in microtonal mode (use "std::queue" to invoke it)
+// Software-detected hardware revision
+  #define HARDWARE_UNKNOWN 0
+  #define HARDWARE_V1_1 1
+  #define HARDWARE_V1_2 2
+  byte Hardware_Version = 0;       // 0 = unknown, 1 = v1.1 board. 2 = v1.2 board.
 // @helpers
   /*
     C++ returns a negative value for 
@@ -921,7 +925,8 @@
   */
   #define LED_COUNT 140
   #define COLCOUNT 10
-  #define ROWCOUNT 14
+  #define ROWCOUNT 16
+  #define BTN_COUNT COLCOUNT*ROWCOUNT
   /*
     Of the 140 buttons, 7 are offset to the bottom left
     quadrant of the Hexboard and are reserved as command
@@ -956,6 +961,10 @@
   */
   class buttonDef {
   public:
+    #define BTN_STATE_OFF 0
+    #define BTN_STATE_NEWPRESS 1
+    #define BTN_STATE_RELEASED 2
+    #define BTN_STATE_HELD 3
     byte     btnState = 0;        // binary 00 = off, 01 = just pressed, 10 = just released, 11 = held
     void interpBtnPress(bool isPress) {
       btnState = (((btnState << 1) + isPress) & 3);
@@ -1076,7 +1085,7 @@
     buttons from 0 to 139. h[i] refers to the 
     button with the LED address = i.
   */
-  buttonDef h[LED_COUNT];        
+  buttonDef h[BTN_COUNT];
   
   wheelDef modWheel = { &wheelMode, &modSticky,
     &h[assignCmd[4]].btnState, &h[assignCmd[5]].btnState, &h[assignCmd[6]].btnState,
@@ -1104,7 +1113,7 @@
   }
 
   void setupGrid() {
-    for (byte i = 0; i < LED_COUNT; i++) {
+    for (byte i = 0; i < BTN_COUNT; i++) {
       h[i].coordRow = (i / 10);
       h[i].coordCol = (2 * (i % 10)) + (h[i].coordRow & 1);
       h[i].isCmd = 0;
@@ -1115,6 +1124,12 @@
       h[assignCmd[c]].isCmd = 1;
       h[assignCmd[c]].note = CMDB + c;
     }
+    // "flag" buttons
+    for (byte i = 140; i < BTN_COUNT; i++) {
+      h[i].isCmd = 1;
+    }
+    // On version 1.2, "button" 140 is shorted (always connected)
+    h[140].note = HARDWARE_V1_2;
   }
 
 // @LED
@@ -1755,8 +1770,8 @@
 
   byte findNextHeldNote() {
     byte n = UNUSED_NOTE;
-    for (byte i = 1; i <= LED_COUNT; i++) {
-      byte j = positiveMod(arpeggiatingNow + i, LED_COUNT);
+    for (byte i = 1; i <= BTN_COUNT; i++) {
+      byte j = positiveMod(arpeggiatingNow + i, BTN_COUNT);
       if ((h[j].MIDIch) && (!h[j].isCmd)) {
         n = j;
         break;
@@ -1783,7 +1798,7 @@
       synth[i].increment = 0;
       synth[i].counter = 0;
     }
-    for (byte i = 0; i < LED_COUNT; i++) {
+    for (byte i = 0; i < BTN_COUNT; i++) {
       h[i].synthCh = 0;
     }
     if (playbackMode == SYNTH_POLY) {
@@ -1795,7 +1810,7 @@
   
   void updateSynthWithNewFreqs() {
     MIDI.sendPitchBend(pbWheel.curValue, 1);
-    for (byte i = 0; i < LED_COUNT; i++) {
+    for (byte i = 0; i < BTN_COUNT; i++) {
       if (!(h[i].isCmd)) {
         if (h[i].synthCh) {
           setSynthFreq(h[i].frequency,h[i].synthCh);           // pass all notes thru synth again if the pitch bend changes
@@ -2069,6 +2084,9 @@
       case CMDB + 3:
         toggleWheel = !toggleWheel;
         break;
+      case HARDWARE_V1_2:
+        Hardware_Version = h[x].note;
+        break;
       default:
         // the rest should all be taken care of within the wheelDef structure
         break;
@@ -2125,8 +2143,8 @@
   */
   GEMPage  menuPageMain("HexBoard MIDI Controller");
   GEMPage  menuPageTuning("Tuning");
-  GEMItem  menuTuningBack("<< Back", menuPageMain);
   GEMItem  menuGotoTuning("Tuning", menuPageTuning);
+  GEMItem  menuTuningBack("<< Back", menuPageMain);
   GEMPage  menuPageLayout("Layout");
   GEMItem  menuGotoLayout("Layout", menuPageLayout); 
   GEMItem  menuLayoutBack("<< Back", menuPageMain);
@@ -2162,7 +2180,13 @@
     To be honest I don't know how to get just a plain text line to show here other than this!
   */
   void fakeButton() {}
-  GEMItem  menuItemVersion("v1.0.0", fakeButton);
+  GEMItem  menuItemVersion("v1.0.1", fakeButton);
+  SelectOptionByte optionByteHardware[] =  {
+    { "V1.1", HARDWARE_UNKNOWN }, { "V1.1" , HARDWARE_V1_1 },
+    { "V1.2", HARDWARE_V1_2 }
+  };
+  GEMSelect selectHardware( sizeof(optionByteHardware)  / sizeof(SelectOptionByte), optionByteHardware);
+  GEMItem  menuItemHardware("HexBoard", Hardware_Version, selectHardware, GEM_READONLY);
   /*
     This GEMItem runs a given procedure when you select it.
     We must declare or define that procedure first.
@@ -2499,6 +2523,7 @@
     menuPageMain.addMenuItem(menuItemTransposeSteps);
     menuPageMain.addMenuItem(menuGotoTesting);
       menuPageTesting.addMenuItem(menuItemVersion);
+      menuPageTesting.addMenuItem(menuItemHardware);
       menuPageTesting.addMenuItem(menuItemPercep);
       menuPageTesting.addMenuItem(menuItemShiftColor);
       menuPageTesting.addMenuItem(menuItemWheelAlt);
@@ -2584,15 +2609,15 @@
         delayMicroseconds(6);                  // delay while column pin mode
         bool didYouPressHex = (digitalRead(p) == LOW);  // hex is pressed if it returns LOW. else not pressed
         h[i].interpBtnPress(didYouPressHex);
-        if (h[i].btnState == 1) {
+        if (h[i].btnState == BTN_STATE_NEWPRESS) {
           h[i].timePressed = runTime;          // log the time
         }
         pinMode(p, INPUT);                     // Set the selected column pin back to INPUT mode (0V / LOW).
        }
     }
-    for (byte i = 0; i < LED_COUNT; i++) {   // For all buttons in the deck
+    for (byte i = 0; i < BTN_COUNT; i++) {   // For all buttons in the deck
       switch (h[i].btnState) {
-        case 1: // just pressed
+        case BTN_STATE_NEWPRESS: // just pressed
           if (h[i].isCmd) {
             cmdOn(i);
           } else if (h[i].inScale || (!scaleLock)) {
@@ -2600,7 +2625,7 @@
             trySynthNoteOn(i);
           }
           break;
-        case 2: // just released
+        case BTN_STATE_RELEASED: // just released
           if (h[i].isCmd) {
             cmdOff(i);
           } else if (h[i].inScale || (!scaleLock)) {
@@ -2608,7 +2633,7 @@
             trySynthNoteOff(i); 
           }
           break;
-        case 3: // held
+        case BTN_STATE_HELD: // held
           break;
         default: // inactive
           break;
