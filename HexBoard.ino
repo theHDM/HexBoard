@@ -1812,6 +1812,7 @@
     return n;
   }
   void replaceMonoSynthWith(byte x) {
+    if (arpeggiatingNow == x) return;
     h[arpeggiatingNow].synthCh = 0;
     arpeggiatingNow = x;
     if (arpeggiatingNow != UNUSED_NOTE) {
@@ -1879,7 +1880,9 @@
 
   void trySynthNoteOff(byte x) {
     if (playbackMode && (playbackMode != SYNTH_POLY)) {
-      replaceMonoSynthWith(findNextHeldNote());
+      if (arpeggiatingNow == x) {
+        replaceMonoSynthWith(findNextHeldNote());
+      }
     }
     if (playbackMode == SYNTH_POLY) {
       if (h[x].synthCh) {
@@ -1909,10 +1912,7 @@
     if (playbackMode == SYNTH_ARPEGGIO) {
       if (runTime - arpeggiateTime > arpeggiateLength) {
         arpeggiateTime = runTime;
-        byte x = findNextHeldNote();
-        if (x != arpeggiatingNow) {
-          replaceMonoSynthWith(x);
-        }
+        replaceMonoSynthWith(findNextHeldNote());
       }
     }
   }
