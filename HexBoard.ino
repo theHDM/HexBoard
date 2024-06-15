@@ -3,7 +3,6 @@
     HexBoard
     Copyright 2022-2023 Jared DeCook and Zach DeCook
     with help from Nicholas Fox
-    Firmware v1.0.0 2024-05-17
     Licensed under the GNU GPL Version 3.
 
     Hardware information:
@@ -1347,24 +1346,39 @@
     and attach usb_midi as the transport.
   */
   Adafruit_USBD_MIDI usb_midi;
-  MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI);
+  MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, usb_midi, UMIDI);
+  MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, SMIDI);
+  // midiD takes the following bitwise flags
+  #define MIDID_NONE 0
+  #define MIDID_USB 1
+  #define MIDID_SER 2
+  #define MIDID_BOTH 3
+  byte midiD = MIDID_USB | MIDID_SER;
+
   std::queue<byte> MPEchQueue;
   byte MPEpitchBendsNeeded; 
 
   float freqToMIDI(float Hz) {             // formula to convert from Hz to MIDI note
     return 69.0 + 12.0 * log2f(Hz / 440.0);
   }
-  float MIDItoFreq(float MIDI) {           // formula to convert from MIDI note to Hz
-    return 440.0 * exp2((MIDI - 69.0) / 12.0);
+  float MIDItoFreq(float midi) {           // formula to convert from MIDI note to Hz
+    return 440.0 * exp2((midi - 69.0) / 12.0);
   }
   float stepsToMIDI(int16_t stepsFromA) {  // return the MIDI pitch associated
     return freqToMIDI(CONCERT_A_HZ) + ((float)stepsFromA * (float)current.tuning().stepSize / 100.0);
   }
 
   void setPitchBendRange(byte Ch, byte semitones) {
-    MIDI.beginRpn(0, Ch);
-    MIDI.sendRpnValue(semitones << 7, Ch);
-    MIDI.endRpn(Ch);
+    if (midiD&MIDID_USB) {
+        UMIDI.beginRpn(0, Ch);
+        UMIDI.sendRpnValue(semitones << 7, Ch);
+        UMIDI.endRpn(Ch);
+    }
+    if (midiD&MIDID_SER) {
+        SMIDI.beginRpn(0, Ch);
+        SMIDI.sendRpnValue(semitones << 7, Ch);
+        SMIDI.endRpn(Ch);
+    }
     sendToLog(
       "set pitch bend range on ch " +
       std::to_string(Ch) + " to be " + 
@@ -1373,9 +1387,16 @@
   }
 
   void setMPEzone(byte masterCh, byte sizeOfZone) {
-    MIDI.beginRpn(6, masterCh);
-    MIDI.sendRpnValue(sizeOfZone << 7, masterCh);
-    MIDI.endRpn(masterCh);
+    if (midiD&MIDID_USB) {
+        UMIDI.beginRpn(6, masterCh);
+        UMIDI.sendRpnValue(sizeOfZone << 7, masterCh);
+        UMIDI.endRpn(masterCh);
+    }
+    if (midiD&MIDID_SER) {
+        SMIDI.beginRpn(6, masterCh);
+        SMIDI.sendRpnValue(sizeOfZone << 7, masterCh);
+        SMIDI.endRpn(masterCh);
+    }
     sendToLog(
       "tried sending MIDI msg to set MPE zone, master ch " +
       std::to_string(masterCh) + ", zone of this size: " + std::to_string(sizeOfZone)
@@ -1416,18 +1437,21 @@
     }
     // force pitch bend back to the expected range of 2 semitones.
     for (byte i = 1; i <= 16; i++) {
-      MIDI.sendControlChange(123, 0, i);
+      if(midiD&MIDID_USB)UMIDI.sendControlChange(123, 0, i);
+      if(midiD&MIDID_SER)SMIDI.sendControlChange(123, 0, i);
       setPitchBendRange(i, PITCH_BEND_SEMIS);   
     }
   }
 
   void sendMIDImodulationToCh1() {
-    MIDI.sendControlChange(1, modWheel.curValue, 1);
+    if(midiD&MIDID_USB)UMIDI.sendControlChange(1, modWheel.curValue, 1);
+    if(midiD&MIDID_SER)SMIDI.sendControlChange(1, modWheel.curValue, 1);
     sendToLog("sent mod value " + std::to_string(modWheel.curValue) + " to ch 1");
   }
 
   void sendMIDIpitchBendToCh1() {
-    MIDI.sendPitchBend(pbWheel.curValue, 1);
+    if(midiD&MIDID_USB)UMIDI.sendPitchBend(pbWheel.curValue, 1);
+    if(midiD&MIDID_SER)SMIDI.sendPitchBend(pbWheel.curValue, 1);
     sendToLog("sent pb wheel value " + std::to_string(pbWheel.curValue) + " to ch 1");
   }
   
@@ -1449,8 +1473,11 @@
         }
       }
       if (h[x].MIDIch) {
-        MIDI.sendNoteOn(h[x].note, velWheel.curValue, h[x].MIDIch); // ch 1-16
-        MIDI.sendPitchBend(h[x].bend, h[x].MIDIch); // ch 1-16
+        if(midiD&MIDID_USB)UMIDI.sendNoteOn(h[x].note, velWheel.curValue, h[x].MIDIch); // ch 1-16
+        if(midiD&MIDID_SER)SMIDI.sendNoteOn(h[x].note, velWheel.curValue, h[x].MIDIch); // ch 1-16
+
+        if(midiD&MIDID_USB)UMIDI.sendPitchBend(h[x].bend, h[x].MIDIch); // ch 1-16
+        if(midiD&MIDID_SER)SMIDI.sendPitchBend(h[x].bend, h[x].MIDIch); // ch 1-16
         sendToLog(
           "sent MIDI noteOn: " + std::to_string(h[x].note) +
           " pb "  + std::to_string(h[x].bend) +
@@ -1465,7 +1492,8 @@
     // this gets called on any non-command hex
     // that is not scale-locked.
     if (h[x].MIDIch) {    // but just in case, check
-      MIDI.sendNoteOff(h[x].note, velWheel.curValue, h[x].MIDIch);    
+      if(midiD&MIDID_USB)UMIDI.sendNoteOff(h[x].note, velWheel.curValue, h[x].MIDIch);
+      if(midiD&MIDID_SER)SMIDI.sendNoteOff(h[x].note, velWheel.curValue, h[x].MIDIch);
       sendToLog(
         "sent note off: " + std::to_string(h[x].note) +
         " pb " + std::to_string(h[x].bend) +
@@ -1482,7 +1510,8 @@
 
   void setupMIDI() {
     usb_midi.setStringDescriptor("HexBoard MIDI");  // Initialize MIDI, and listen to all MIDI channels
-    MIDI.begin(MIDI_CHANNEL_OMNI);                  // This will also call usb_midi's begin()
+    UMIDI.begin(MIDI_CHANNEL_OMNI);                 // This will also call usb_midi's begin()
+    SMIDI.begin(MIDI_CHANNEL_OMNI);
     resetTuningMIDI();
     sendToLog("setupMIDI okay");
   }
@@ -1809,7 +1838,8 @@
   }
   
   void updateSynthWithNewFreqs() {
-    MIDI.sendPitchBend(pbWheel.curValue, 1);
+    if(midiD&MIDID_USB)UMIDI.sendPitchBend(pbWheel.curValue, 1);
+    if(midiD&MIDID_SER)SMIDI.sendPitchBend(pbWheel.curValue, 1);
     for (byte i = 0; i < BTN_COUNT; i++) {
       if (!(h[i].isCmd)) {
         if (h[i].synthCh) {
@@ -2086,6 +2116,7 @@
         break;
       case HARDWARE_V1_2:
         Hardware_Version = h[x].note;
+        setupHardware();
         break;
       default:
         // the rest should all be taken care of within the wheelDef structure
@@ -2687,6 +2718,12 @@
         storeRotaryTurn = 0;
         screenTime = 0;
       }
+    }
+  }
+
+  void setupHardware() {
+    if (Hardware_Version == HARDWARE_V1_2) {
+        midiD = MIDID_USB | MIDID_SER;
     }
   }
 
