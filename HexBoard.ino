@@ -1355,6 +1355,9 @@
   #define MIDID_BOTH 3
   byte midiD = MIDID_USB | MIDID_SER;
 
+  // What General MIDI program change number to send
+  byte generalMidi = 1;
+
   std::queue<byte> MPEchQueue;
   byte MPEpitchBendsNeeded; 
 
@@ -1836,6 +1839,10 @@
       }
     }
   }
+  void sendProgramChange() {
+    if(midiD&MIDID_USB)UMIDI.sendProgramChange(generalMidi - 1, 1);
+    if(midiD&MIDID_SER)SMIDI.sendProgramChange(generalMidi - 1, 1);
+  }
   
   void updateSynthWithNewFreqs() {
     if(midiD&MIDID_USB)UMIDI.sendPitchBend(pbWheel.curValue, 1);
@@ -2282,6 +2289,62 @@
   GEMSelect selectPlayback(sizeof(optionBytePlayback) / sizeof(SelectOptionByte), optionBytePlayback);
   GEMItem  menuItemPlayback(  "Synth mode:",       playbackMode,  selectPlayback, resetSynthFreqs);
 
+  // General MIDI 1
+  SelectOptionByte optionByteGeneralMidi[] = {
+    // Piano
+    {"Piano 1", 1}, {"Piano 2", 2}, {"Piano 3", 3}, {"HonkyTonk", 4},
+    {"EPiano1", 5}, {"EPiano2", 6}, {"HarpsiChord", 7}, {"Clavinet", 8},
+    // Chromatic Percussion
+    {"Celesta", 9},  {"Glockenspiel", 10}, {"MusicBox", 11}, {"Vibraphone", 12},
+    {"Marimba", 13}, {"Xylophone", 14}, {"TubeBells", 15}, {"Dulcimer", 16},
+    // Organ
+    {"Organ 1", 17}, {"Organ 2", 18}, {"Organ 3", 19}, {"ChurchOrgan", 20},
+    {"ReedOrgan", 21}, {"Accordion", 22}, {"Harmonica", 23}, {"Bandoneon", 24},
+    // Guitar
+    {"AGtrNylon", 25}, {"AGtrSteel", 26},
+    {"EGtrJazz", 27}, {"EGtrClean", 28}, {"EGtrMuted", 29},
+    {"EGtrOverdrive", 30}, {"EGtrDistortion", 31}, {"EGtrHarmonics", 32},
+    // Bass
+    {"ABass", 33}, {"EBasFinger", 34}, {"EBasPicked", 35}, {"EBasFretless", 36},
+    {"SlpBass1", 37}, {"SlpBas2", 38}, {"SynBas1", 39}, {"SynBas2", 40},
+    // Strings
+    {"Violin", 41}, {"Viola", 42}, {"Cello", 43}, {"ContraBass", 44},
+    {"TremoloStrings", 45}, {"PizzicatoStrings", 46}, {"OrchHarp", 47}, {"Timpani", 48},
+    // Ensemble
+    {"StrEns1", 49}, {"StrEns2", 50}, {"SynStr1", 51}, {"SynStr2", 52},
+    {"ChoirAahs", 53}, {"VoiceOohs", 54}, {"SynVoice", 55}, {"OrchHit", 56},
+    // Brass
+    {"Trumpet", 57}, {"Trombone", 58}, {"Tuba", 59}, {"MutedTrumpet", 60},
+    {"FrenchHorn", 61}, {"BrassSection", 62}, {"SynBrs1", 63}, {"SynBrs2", 64},
+    // Reed
+    {"Sop Sax", 65}, {"AltoSax", 66}, {"Ten Sax", 67}, {"BariSax", 68},
+    {"Oboe", 69}, {"EnglHorn", 70}, {"Bassoon", 71}, {"Clarinet", 72},
+    // Pipe
+    {"Piccolo", 73}, {"Flute", 74}, {"Recorder", 75}, {"PanFlute", 76},
+    {"BlownBottle", 77}, {"Shakuhachi", 78}, {"Whistle", 79}, {"Ocarina", 80},
+    // Synth Lead
+    {"Ld1Square", 81}, {"Ld2Sawtooth", 82}, {"Ld3Calliope", 83}, {"Ld4Chiff", 84},
+    {"Ld5Charang", 85}, {"Ld6Voice", 86}, {"Ld7Fifths", 87}, {"Ld8Bass&Lead", 88},
+    // Synth Pad
+    {"Pd1NewAge", 89}, {"Pd2Warm", 90}, {"Pd3Polysynth", 91}, {"Pd4Choir", 92},
+    {"Pd5BowedGlass", 93}, {"Pd6Metallic", 94}, {"Pd7Halo", 95}, {"Pd8Sweep", 96},
+     // Synth Effects
+    {"FX1Rain", 97}, {"FX2Soundtrack", 98}, {"FX3Crystal", 99}, {"FX4Atmosphere", 100},
+    {"FX5Bright", 101}, {"FX6Goblins", 102}, {"FX7Echoes", 103}, {"FX8SciFi)", 104},
+    // Ethnic
+    {"Sitar", 105}, {"Banjo", 106}, {"Shamisen", 107}, {"Koto", 108},
+    {"Kalimba", 109}, {"BagPipe", 110}, {"Fiddle", 111}, {"Shanai", 112},
+    // Percussive
+    {"TinkleBell", 113}, {"Cowbell", 114}, {"SteelDrums", 115}, {"WoodBlock", 116},
+    {"TaikoDrum", 117}, {"MeloTom", 118}, {"SynDrum", 119}, {"RevCymbal", 120},
+    // Sound Effects
+    {"GtrFretNoise", 121}, {"BreathNoise", 122}, {"Seashore", 123}, {"BirdTweet", 124},
+    {"TelephoneRing", 125}, {"Helicopter", 126}, {"Applause", 127}, {"Gunshot", 128},
+  };
+  GEMSelect selectGeneralMidi(sizeof(optionByteGeneralMidi) / sizeof(SelectOptionByte), optionByteGeneralMidi);
+  GEMItem  menuItemGeneralMidi("GeneralMidi:", generalMidi,  selectGeneralMidi, sendProgramChange);
+
+
   // doing this long-hand because the STRUCT has problems accepting string conversions of numbers for some reason
   SelectOptionInt optionIntTransposeSteps[] = {
     {"-127",-127},{"-126",-126},{"-125",-125},{"-124",-124},{"-123",-123},{"-122",-122},{"-121",-121},{"-120",-120},{"-119",-119},{"-118",-118},{"-117",-117},{"-116",-116},{"-115",-115},{"-114",-114},{"-113",-113},
@@ -2550,6 +2613,7 @@
     menuPageMain.addMenuItem(menuGotoSynth);
       menuPageSynth.addMenuItem(menuItemPlayback);  
       menuPageSynth.addMenuItem(menuItemWaveform);
+      menuPageSynth.addMenuItem(menuItemGeneralMidi);
       menuPageSynth.addMenuItem(menuSynthBack);
     menuPageMain.addMenuItem(menuItemTransposeSteps);
     menuPageMain.addMenuItem(menuGotoTesting);
