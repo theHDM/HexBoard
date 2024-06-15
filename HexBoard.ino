@@ -1909,7 +1909,10 @@
     if (playbackMode == SYNTH_ARPEGGIO) {
       if (runTime - arpeggiateTime > arpeggiateLength) {
         arpeggiateTime = runTime;
-        replaceMonoSynthWith(findNextHeldNote());
+        byte x = findNextHeldNote();
+        if (x != arpeggiatingNow) {
+          replaceMonoSynthWith(x);
+        }
       }
     }
   }
