@@ -2347,6 +2347,97 @@
   GEMSelect selectGeneralMidi(sizeof(optionByteGeneralMidi) / sizeof(SelectOptionByte), optionByteGeneralMidi);
   GEMItem  menuItemGeneralMidi("GeneralMidi:", generalMidi,  selectGeneralMidi, sendProgramChange);
 
+  // Roland KR-55 Normal/MT1 mode
+  SelectOptionByte optionByteRolandMT1[] = {
+    {"APiano1",  3}, {"APiano2",  2}, {"APiano3",  1}, {"APiano4",  5},
+    {"Harpsi1",  4}, {"Harpsi2",  9},
+    {"Mallet1",  6}, {"Mallet2", 10}, {"Mallet3", 11},
+    {"EPiano1",  7}, {"EPiano2",  8},
+    {"POrgan1", 12}, {"POrgan2", 13}, {"POrgan3", 14},
+    {"EOrgan1", 15}, {"EOrgan2", 16}, {"EOrgan3", 17},
+    {"Strngs1", 18}, {"Strngs2", 19}, {"Strngs3", 20}, {"Strngs4", 21},
+    {"Choir 1", 22}, {"Choir 2", 23},
+    {"Violin1", 24}, {"Violin2", 25},
+    {"AGuitr1", 26}, {"AGuitr2", 27},
+    {"Bass  1", 28}, {"Bass  2", 29}, {"Bass  3", 30}, {"Bass  4", 31}, {"Bass  5", 32}, {"Bass  6", 33}, {"Bass  7", 34}, {"Bass  8", 35},
+    {"Bell  1", 36}, {"Bell  2", 37},
+    {"Clarinet", 38},{"Clarin2", 39},
+    {"Oboe  1", 40}, {"Oboe  2", 41},
+    {"Flute 1", 42}, {"Flute 2", 43},
+    {"PanFlute",44}, {"PanFlu2", 45},
+    {"Sax   1", 46}, {"Sax   2", 47},
+    {"Trumpet", 48}, {"Trumpe2", 49},
+    {"Brass 1", 50}, {"Brass 2", 51}, {"Brass 3", 52},
+    {"Fantasia",53}, {"Fantas2", 54},
+    {"SynVoice",55}, {"SynVoi2", 56}, {"SynVoi3", 57}, {"SynVoi4", 58},
+    {"SynPad1", 59}, {"SynPad2", 60},
+    {"Drums 1", 61}, {"Drums 2", 62}, {"Drums 3", 63}, {"Drums 4", 64},
+    // 65-128 map to card tones 1-64
+  };
+  GEMSelect selectRolandMT1(sizeof(optionByteRolandMT1) / sizeof(SelectOptionByte), optionByteRolandMT1);
+  GEMItem  menuItemRolandMT1("RolandMT1:", generalMidi,  selectRolandMT1, sendProgramChange);
+
+  // Roland KR-55 MT2 mode
+  SelectOptionByte optionByteRolandMT2[] = {
+    // "Program Change numbers transmitted when a Tone is selected"
+    {"APiano1",  2}, {"APiano2",  1}, {"APiano3",  3}, {"APiano4",  8},
+    {"Harpsi1", 18}, {"Harpsi2", 17},
+    {"Mallet1", 98}, {"Mallet2", 99}, {"Mallet3",105},
+    {"EPiano1",  4}, {"EPiano2",  6},
+    {"POrgan2", 13}, {"POrgan3", 14}, {"POrgan4", 15},
+    {"EOrgan1",  9}, {"EOrgan2", 10}, {"EOrgan4", 12},
+    {"Strngs1", 50}, {"Strngs2", 51}, {"Strngs3", 49}, {"Strngs4", 52},
+    // NO {"Choir 1", XX}, {"Choir 2", XX},
+    {"Violin1", 54}, {"Violin2", 53},
+    {"AGuitar", 61}, {"AGuitr2", 60},
+    {"Bass  1", 65}, {"Bass  2", 72}, {"Bass  3", 71}, {"Bass  4", 29}, {"Bass  5", 32}, {"Bass  6", 30}, {"Bass  7", 69}, {"Bass  8", 70},
+    {"Bell  1",103}, {"Bell  2", 47},
+    {"Clarinet",83}, {"Clarin2", 84},
+    {"Oboe  1", 87}, {"Oboe  2", 85},
+    {"Flute 1", 73}, {"Flute 2", 74},
+    {"PanFlute",76}, // no {"PanFlu2", XX},
+    {"Sax   1", 79}, {"Sax   2", 81},
+    {"Trumpet", 89}, {"Trumpe2", 90},
+    {"Brass 1", 25}, {"Brass 2", 26}, {"Brass 3", 27},
+    {"Fantasia",33}, {"Fantas2", 34},
+    {"SynVoice",35}, {"SynVoi2", 41},/*{"SynVoi3", 57},*/{"SynVoi4", 36},
+    // no {"SynPad1", 59}, {"SynPad2", 60},
+    // no {"Drums 1", 61}, {"Drums 2", 62}, {"Drums 3", 63}, {"Drums 4", 64},
+    // Extras (not accessible using menu)
+    {"Accordion", 16},{"FunnyVox", 40}, {"Dr.Solo", 45},{"Sitar", 64},
+    // additional assignments "The tone selected when a Program Change is received"
+    {"EPiano1",  5},{"EPiano2",  7},
+    {"EOrgan2", 11},
+    {"Harpsi1", 19},
+    {"Bass  8", 20},{"Bass  8", 21},{"Bass  8", 22},
+    {"EPiano1", 23},{"EPiano1", 24},
+    {"Bass  2", 31},
+    // 37
+    {"Strngs4", 38},
+    {"Fantasia",39}, {"Fantas2", 41},
+    {"Oboe  1", 43},
+    // 44
+    {"Clarinet",46},
+    // 48
+    {"Violin2", 55},{"Violin1", 56}, {"Violin1", 57},
+    {"AGuitr1", 58}, {"AGuitr1", 59}, {"AGuitr2", 62},
+    {"Bass  7", 63}, {"Bass  1", 66}, {"Bass  2", 67}, {"Bass  2", 68},
+    {"Flute 1", 75}, {"Flute 2", 76},
+    {"PanFlute",78},
+    {"Sax   1", 80}, {"Sax   2", 82},
+    {"Oboe  1", 86},
+    {"Accordion", 88},
+    {"Trumpet", 91}, {"Trumpe2", 92}, {"Trumpe2", 93}, {"Trumpe2", 94}, {"Trumpet", 95},
+    {"Brass 1", 96}, {"Brass 2", 97},
+    {"Mallet2",100}, {"Bell  2",101}, {"Mallet1",102}, {"Mallet3",104},
+    {"AGuitar",106},
+    // 107
+    {"PanFlute",108},{"PanFlute",109},{"PanFlute",110},{"PanFlute",111},{"PanFlute",112},
+    // 113-128
+  };
+  GEMSelect selectRolandMT2(sizeof(optionByteRolandMT2) / sizeof(SelectOptionByte), optionByteRolandMT2);
+  GEMItem  menuItemRolandMT2("RolandMT2:", generalMidi,  selectRolandMT2, sendProgramChange);
+
 
   // doing this long-hand because the STRUCT has problems accepting string conversions of numbers for some reason
   SelectOptionInt optionIntTransposeSteps[] = {
@@ -2617,6 +2708,8 @@
       menuPageSynth.addMenuItem(menuItemPlayback);  
       menuPageSynth.addMenuItem(menuItemWaveform);
       menuPageSynth.addMenuItem(menuItemGeneralMidi);
+      menuPageSynth.addMenuItem(menuItemRolandMT1);
+      menuPageSynth.addMenuItem(menuItemRolandMT2);
       menuPageSynth.addMenuItem(menuSynthBack);
     menuPageMain.addMenuItem(menuItemTransposeSteps);
     menuPageMain.addMenuItem(menuGotoTesting);
