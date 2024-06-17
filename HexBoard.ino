@@ -1355,8 +1355,8 @@
   #define MIDID_BOTH 3
   byte midiD = MIDID_USB | MIDID_SER;
 
-  // What General MIDI program change number to send
-  byte generalMidi = 1;
+  // What program change number we last sent (General MIDI/Roland MT-32)
+  byte programChange = 0;
 
   std::queue<byte> MPEchQueue;
   byte MPEpitchBendsNeeded; 
@@ -1841,8 +1841,8 @@
     }
   }
   void sendProgramChange() {
-    if(midiD&MIDID_USB)UMIDI.sendProgramChange(generalMidi - 1, 1);
-    if(midiD&MIDID_SER)SMIDI.sendProgramChange(generalMidi - 1, 1);
+    if(midiD&MIDID_USB)UMIDI.sendProgramChange(programChange - 1, 1);
+    if(midiD&MIDID_SER)SMIDI.sendProgramChange(programChange - 1, 1);
   }
   
   void updateSynthWithNewFreqs() {
@@ -2292,6 +2292,66 @@
   GEMSelect selectPlayback(sizeof(optionBytePlayback) / sizeof(SelectOptionByte), optionBytePlayback);
   GEMItem  menuItemPlayback(  "Synth mode:",       playbackMode,  selectPlayback, resetSynthFreqs);
 
+  // Roland MT-32 mode (1987)
+  SelectOptionByte optionByteRolandMT32[] = {
+    // Piano
+    {"APiano1",  1}, {"APiano2",  2}, {"APiano3",  3},
+    {"EPiano1",  4}, {"EPiano2",  5}, {"EPiano3",  6}, {"EPiano4",  7},
+    {"HonkyTonk",8},
+    // Organ
+    {"EOrgan1",  9}, {"EOrgan2", 10}, {"EOrgan3", 11}, {"EOrgan4", 12},
+    {"POrgan2", 13}, {"POrgan3", 14}, {"POrgan4", 15},
+    {"Accordion",16},
+    // Keybrd
+    {"Harpsi1", 17}, {"Harpsi2", 18}, {"Harpsi3", 19},
+    {"Clavi 1", 20}, {"Clavi 2", 21}, {"Clavi 3", 22},
+    {"Celesta", 23}, {"Celest2", 24},
+    // S Brass
+    {"SBrass1", 25}, {"SBrass2", 26}, {"SBrass3", 27}, {"SBrass4", 28},
+    // SynBass
+    {"SynBass", 29}, {"SynBas2", 30}, {"SynBas3", 31}, {"SynBas4", 32},
+    // Synth 1
+    {"Fantasy", 33}, {"HarmoPan",34}, {"Chorale", 35}, {"Glasses", 36},
+    {"Soundtrack",37},{"Atmosphere",38},{"WarmBell",39},{"FunnyVox",40},
+    // Synth 2
+    {"EchoBell",41}, {"IceRain", 42}, {"Oboe2K1", 43}, {"EchoPan", 44},
+    {"Dr.Solo", 45}, {"SchoolDaze",46},{"BellSinger",47},{"SquareWave",48},
+    // Strings
+    {"StrSec1", 49}, {"StrSec2", 50}, {"StrSec3", 51}, {"Pizzicato", 52},
+    {"Violin1", 53}, {"Violin2", 54}, {"Cello 1", 55}, {"Cello 2", 56},
+    {"ContraBass",57}, {"Harp  1", 58}, {"Harp  2", 59},
+    // Guitar
+    {"Guitar1", 60}, {"Guitar2", 61}, {"EGuitr1", 62}, {"EGuitr2", 63},
+    {"Sitar", 64},
+    // Bass
+    {"ABass 1", 65}, {"ABass 2", 66}, {"EBass 1", 67}, {"EBass 2", 68},
+    {"SlapBass", 69},{"SlapBa2", 70}, {"Fretless", 71},{"Fretle2", 72},
+    // Wind
+    {"Flute 1", 73}, {"Flute 2", 74}, {"Piccolo", 75}, {"Piccol2", 76},
+    {"Recorder",77}, {"PanPipes",78},
+    {"Sax   1", 79}, {"Sax   2", 80}, {"Sax   3", 81}, {"Sax   4", 82},
+    {"Clarinet",83}, {"Clarin2", 84}, {"Oboe",    85}, {"EnglHorn", 86},
+    {"Bassoon", 87}, {"Harmonica",88},
+    // Brass
+    {"Trumpet", 89}, {"Trumpe2", 90}, {"Trombone",91}, {"Trombo2", 92},
+    {"FrHorn1", 93}, {"FrHorn2", 94},
+    {"Tuba", 95},    {"BrsSect", 96}, {"BrsSec2", 97},
+    // Mallet
+    {"Vibe  1", 98}, {"Vibe  2", 99},
+    {"SynMallet",100}, {"WindBell",101}, {"Glock",102}, {"TubeBell",103}, {"XyloPhone",104}, {"Marimba",105},
+    // Special
+    {"Koto", 106}, {"Sho", 107}, {"Shakuhachi",108},
+    {"Whistle",109}, {"Whistl2",110}, {"BottleBlow",111},{"BreathPipe",112},
+    // Percussion
+    {"Timpani",113}, {"MelTom", 114}, {"DeepSnare",115},
+    {"ElPerc1",116}, {"ElPerc2",117}, {"Taiko",  118}, {"TaikoRim",119},
+    {"Cymbal",120}, {"Castanets",121}, {"Triangle",122},
+    // Effects
+    {"OrchHit",123}, {"Telephone",124}, {"BirdTweet",125}, {"1NoteJam",126}, {"WaterBells",127}, {"JungleTune",128},
+  };
+  GEMSelect selectRolandMT32(sizeof(optionByteRolandMT32) / sizeof(SelectOptionByte), optionByteRolandMT2);
+  GEMItem  menuItemRolandMT32("RolandMT32:", programChange,  selectRolandMT32, sendProgramChange);
+
   // General MIDI 1
   SelectOptionByte optionByteGeneralMidi[] = {
     // Piano
@@ -2345,7 +2405,7 @@
     {"TelephoneRing", 125}, {"Helicopter", 126}, {"Applause", 127}, {"Gunshot", 128},
   };
   GEMSelect selectGeneralMidi(sizeof(optionByteGeneralMidi) / sizeof(SelectOptionByte), optionByteGeneralMidi);
-  GEMItem  menuItemGeneralMidi("GeneralMidi:", generalMidi,  selectGeneralMidi, sendProgramChange);
+  GEMItem  menuItemGeneralMidi("GeneralMidi:", programChange,  selectGeneralMidi, sendProgramChange);
 
 
   // doing this long-hand because the STRUCT has problems accepting string conversions of numbers for some reason
@@ -2616,6 +2676,7 @@
     menuPageMain.addMenuItem(menuGotoSynth);
       menuPageSynth.addMenuItem(menuItemPlayback);  
       menuPageSynth.addMenuItem(menuItemWaveform);
+      menuPageSynth.addMenuItem(menuItemRolandMT32);
       menuPageSynth.addMenuItem(menuItemGeneralMidi);
       menuPageSynth.addMenuItem(menuSynthBack);
     menuPageMain.addMenuItem(menuItemTransposeSteps);
