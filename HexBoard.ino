@@ -1536,9 +1536,15 @@
   #define PIEZO_PIN 23
   #define PIEZO_SLICE 3
   #define PIEZO_CHNL 1
-  #define AUDIO_PIN 25
-  #define AUDIO_SLICE 4
-  #define AUDIO_CHNL 1
+  #define AJACK_PIN 25
+  #define AJACK_SLICE 4
+  #define AJACK_CHNL 1
+  // midiD takes the following bitwise flags
+  #define AUDIO_NONE 0
+  #define AUDIO_PIEZO 1
+  #define AUDIO_AJACK 2
+  #define AUDIO_BOTH 3
+  byte audioD = AUDIO_PIEZO | AUDIO_AJACK;
   /*
     These definitions provide 8-bit samples to emulate.
     You can add your own as desired; it must
@@ -1732,7 +1738,8 @@
     mix *= attenuation[(playbackMode == SYNTH_POLY) * voices]; // [19bit]*atten[6bit] = [25bit]
     mix *= velWheel.curValue; // [25bit]*vel[7bit]=[32bit], poly+ 
     level = mix >> 24;  // [32bit] - [8bit] = [24bit]
-    pwm_set_chan_level(PIEZO_SLICE, PIEZO_CHNL, level);
+    if(audioD&AUDIO_PIEZO)pwm_set_chan_level(PIEZO_SLICE, PIEZO_CHNL, level);
+    if(audioD&AUDIO_AJACK)pwm_set_chan_level(AJACK_SLICE, AJACK_CHNL, level);
   }
   // RUN ON CORE 1
   byte isoTwoTwentySix(float f) {
@@ -1893,13 +1900,13 @@
     }
   }
 
-  void setupSynth() {
-    gpio_set_function(PIEZO_PIN, GPIO_FUNC_PWM);      // set that pin as PWM
-    pwm_set_phase_correct(PIEZO_SLICE, true);           // phase correct sounds better
-    pwm_set_wrap(PIEZO_SLICE, 254);                     // 0 - 254 allows 0 - 255 level
-    pwm_set_clkdiv(PIEZO_SLICE, 1.0f);                  // run at full clock speed
-    pwm_set_chan_level(PIEZO_SLICE, PIEZO_CHNL, 0);        // initialize at zero to prevent whining sound
-    pwm_set_enabled(PIEZO_SLICE, true);                 // ENGAGE!
+  void setupSynth(byte pin, byte slice) {
+    gpio_set_function(pin, GPIO_FUNC_PWM);      // set that pin as PWM
+    pwm_set_phase_correct(slice, true);           // phase correct sounds better
+    pwm_set_wrap(slice, 254);                     // 0 - 254 allows 0 - 255 level
+    pwm_set_clkdiv(slice, 1.0f);                  // run at full clock speed
+    pwm_set_chan_level(slice, PIEZO_CHNL, 0);        // initialize at zero to prevent whining sound
+    pwm_set_enabled(slice, true);                 // ENGAGE!
     hw_set_bits(&timer_hw->inte, 1u << ALARM_NUM);  // initialize the timer
     irq_set_exclusive_handler(ALARM_IRQ, poll);     // function to run every interrupt
     irq_set_enabled(ALARM_IRQ, true);               // ENGAGE!
@@ -2292,6 +2299,13 @@
   GEMSelect selectPlayback(sizeof(optionBytePlayback) / sizeof(SelectOptionByte), optionBytePlayback);
   GEMItem  menuItemPlayback(  "Synth mode:",       playbackMode,  selectPlayback, resetSynthFreqs);
 
+  // Hardware V1.2-only
+  SelectOptionByte optionByteAudioD[] =  {
+    { "Buzzer", AUDIO_PIEZO }, { "Jack" , AUDIO_AJACK }, { "Both", AUDIO_BOTH }
+  };
+  GEMSelect selectAudioD( sizeof(optionByteAudioD)  / sizeof(SelectOptionByte), optionByteAudioD);
+  GEMItem  menuItemAudioD("SynthOutput:", audioD, selectAudioD);
+
   // Roland MT-32 mode (1987)
   SelectOptionByte optionByteRolandMT32[] = {
     // Piano
@@ -2676,6 +2690,7 @@
     menuPageMain.addMenuItem(menuGotoSynth);
       menuPageSynth.addMenuItem(menuItemPlayback);  
       menuPageSynth.addMenuItem(menuItemWaveform);
+      // menuItemAudioD added here for hardware V1.2
       menuPageSynth.addMenuItem(menuItemRolandMT32);
       menuPageSynth.addMenuItem(menuItemGeneralMidi);
       menuPageSynth.addMenuItem(menuSynthBack);
@@ -2852,6 +2867,8 @@
   void setupHardware() {
     if (Hardware_Version == HARDWARE_V1_2) {
         midiD = MIDID_USB | MIDID_SER;
+        audioD = AUDIO_PIEZO | AUDIO_AJACK;
+        menuPageSynth.addMenuItem(menuItemAudioD, 2);
     }
   }
 
@@ -2904,7 +2921,8 @@
     dealWithRotary();  // deal with menu
   }
   void setup1() {  // set up on second core
-    setupSynth();
+    setupSynth(PIEZO_PIN, PIEZO_SLICE);
+    setupSynth(AJACK_PIN, AJACK_SLICE);
   }
   void loop1() {  // run on second core
     readKnob();
