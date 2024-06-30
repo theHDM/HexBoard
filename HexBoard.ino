@@ -151,6 +151,8 @@
   #define BRIGHT_MID 180
   #define BRIGHT_LOW 150
   #define BRIGHT_DIM 110
+  #define BRIGHT_DIMMER 50
+  #define BRIGHT_OFF 0
   byte globalBrightness = BRIGHT_MID;
 
 // @microtonal
@@ -2454,7 +2456,7 @@
   GEMSelect selectAnimate( sizeof(optionByteAnimate)  / sizeof(SelectOptionByte), optionByteAnimate);
   GEMItem  menuItemAnimate( "Animation:", animationType, selectAnimate);
 
-  SelectOptionByte optionByteBright[] = { { "Dim", BRIGHT_DIM}, {"Low", BRIGHT_LOW}, {"Normal", BRIGHT_MID}, {"High", BRIGHT_HIGH}, {"THE SUN", BRIGHT_MAX } };
+  SelectOptionByte optionByteBright[] = { { "Off", BRIGHT_OFF}, {"Dimmer", BRIGHT_DIMMER}, {"Dim", BRIGHT_DIM}, {"Low", BRIGHT_LOW}, {"Normal", BRIGHT_MID}, {"High", BRIGHT_HIGH}, {"THE SUN", BRIGHT_MAX } };
   GEMSelect selectBright( sizeof(optionByteBright) / sizeof(SelectOptionByte), optionByteBright);
   GEMItem menuItemBright( "Brightness", globalBrightness, selectBright, setLEDcolorCodes);
 
@@ -2869,6 +2871,7 @@
         midiD = MIDID_USB | MIDID_SER;
         audioD = AUDIO_PIEZO | AUDIO_AJACK;
         menuPageSynth.addMenuItem(menuItemAudioD, 2);
+        globalBrightness = BRIGHT_DIM;
     }
   }
 
