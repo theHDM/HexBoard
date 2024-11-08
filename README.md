@@ -30,6 +30,10 @@ Created by Nicholas Fox, sometimes available at https://github.com/theHDM/hexper
 
 [![builds.sr.ht status](https://builds.sr.ht/~earboxer/HexBoard/commits/hexperiment.svg)](https://builds.sr.ht/~earboxer/HexBoard/commits/hexperiment?)
 
+## Golden Master firmware
+
+Since version 1.0.0, hexperiment has been merged into the main firmware branch. This firmware is only for the production model.
+
 ### Building the firmware
 
 If you want to build the firmware,
@@ -56,13 +60,6 @@ arduino-cli lib install "U8g2" # dependency for GEM
 arduino-cli lib install "Adafruit GFX Library" # dependency for GEM
 arduino-cli lib install "GEM"
 sed -i 's@#include "config/enable-glcd.h"@//\0@g' ~/Arduino/libraries/GEM/src/config.h # remove dependency from GEM
-# Correct Rotary Library
-git clone https://github.com/buxtronix/arduino buxduino
-cd buxduino
-git apply ../Rotary.patch
-cd ..
-mv buxduino/libraries/Rotary ~/Arduino/libraries/
-rm -rf buxduino
 # Run Make to build the firmware
 make
 ```
