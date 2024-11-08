@@ -62,42 +62,18 @@
 // @init
   #include <Arduino.h>            // this is necessary to talk to the Hexboard!
   #include <Wire.h>               // this is necessary to deal with the pins and wires
-  #define SDAPIN 16
-  #define SCLPIN 17
   #include <GEM_u8g2.h>           // library of code to create menu objects on the B&W display
-  #include <numeric>              // need that GCD function, son
-  #include <string>               // standard C++ library string classes (use "std::string" to invoke it); these do not cause the memory corruption that Arduino::String does.
-  #include <queue>                // standard C++ library construction to store open channels in microtonal mode (use "std::queue" to invoke it)
-// Software-detected hardware revision
+
+  #include "src/syntacticSugar.h"
+  #include "src/config.h"
+  #include "src/TaskManager.h"
+  #include "src/rotaryKnob.h"
+  #include "src/hexKeyboard.h"
+
   #define HARDWARE_UNKNOWN 0
   #define HARDWARE_V1_1 1
-  #define HARDWARE_V1_2 2
+  #define HARDWARE_V1_2 2           // Software-detected hardware revision
   byte Hardware_Version = 0;       // 0 = unknown, 1 = v1.1 board. 2 = v1.2 board.
-// @helpers
-  /*
-    C++ returns a negative value for 
-    negative N % D. This function
-    guarantees the mod value is always
-    positive.
-  */
-  int positiveMod(int n, int d) {
-    return (((n % d) + d) % d);
-  }
-  /*
-    There may already exist linear interpolation
-    functions in the standard library. This one is helpful
-    because it will do the weighting division for you.
-    It only works on byte values since it's intended
-    to blend color values together. A better C++
-    coder may be able to allow automatic type casting here.
-  */
-  byte byteLerp(byte xOne, byte xTwo, float yOne, float yTwo, float y) {
-    float weight = (y - yOne) / (yTwo - yOne);
-    int temp = xOne + ((xTwo - xOne) * weight);
-    if (temp < xOne) {temp = xOne;}
-    if (temp > xTwo) {temp = xTwo;}
-    return temp;
-  }
 
 // @defaults
   /*
@@ -122,7 +98,7 @@
   #define SYNTH_MONO 1
   #define SYNTH_ARPEGGIO 2
   #define SYNTH_POLY 3
-  byte playbackMode = SYNTH_OFF;
+  byte playbackMode = SYNTH_POLY;
 
   #define WAVEFORM_SINE 0
   #define WAVEFORM_STRINGS 1
@@ -151,7 +127,7 @@
   #define BRIGHT_MID 180
   #define BRIGHT_LOW 150
   #define BRIGHT_DIM 110
-  #define BRIGHT_DIMMER 50
+  #define BRIGHT_DIMMER 70
   #define BRIGHT_OFF 0
   byte globalBrightness = BRIGHT_MID;
 
@@ -853,18 +829,13 @@
     This section of the code handles basic
     timekeeping stuff
   */
-  #include "hardware/timer.h"     // library of code to access the processor's clock functions
-  uint64_t runTime = 0;                // Program loop consistent variable for time in microseconds since power on
-  uint64_t lapTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
-  uint64_t loopTime = 0;               // Used to check speed of the loop
-  uint64_t readClock() {
-    uint64_t temp = timer_hw->timerawh;
-    return (temp << 32) | timer_hw->timerawl;
-  }
+  timeStamp runTime = 0;                // Program loop consistent variable for time in microseconds since power on
+  timeStamp lapTime = 0;                // Used to keep track of how long each loop takes. Useful for rate-limiting.
+  timeStamp loopTime = 0;               // Used to check speed of the loop
   void timeTracker() {
     lapTime = runTime - loopTime;
     loopTime = runTime;                                 // Update previousTime variable to give us a reference point for next loop
-    runTime = readClock();   // Store the current time in a uniform variable for this program loop
+    runTime = getTheCurrentTime();   // Store the current time in a uniform variable for this program loop
   }
 
 // @fileSystem
@@ -899,22 +870,6 @@
     to a multiplexing unit, which hotswaps between the 14 rows
     of ten buttons to allow all 140 inputs to be read in one
     program read cycle.
-  */
-  #define MPLEX_1_PIN 4
-  #define MPLEX_2_PIN 5
-  #define MPLEX_4_PIN 2
-  #define MPLEX_8_PIN 3
-  #define COLUMN_PIN_0 6
-  #define COLUMN_PIN_1 7
-  #define COLUMN_PIN_2 8
-  #define COLUMN_PIN_3 9
-  #define COLUMN_PIN_4 10
-  #define COLUMN_PIN_5 11
-  #define COLUMN_PIN_6 12
-  #define COLUMN_PIN_7 13
-  #define COLUMN_PIN_8 14
-  #define COLUMN_PIN_9 15
-  /*
     There are 140 LED pixels on the Hexboard.
     LED instructions all go through the LED_PIN.
     It so happens that each LED pixel corresponds
@@ -970,20 +925,20 @@
     void interpBtnPress(bool isPress) {
       btnState = (((btnState << 1) + isPress) & 3);
     }
-    int8_t   coordRow = 0;        // hex coordinates
-    int8_t   coordCol = 0;        // hex coordinates
-    uint64_t timePressed = 0;     // timecode of last press
-    uint32_t LEDcodeAnim = 0;     // calculate it once and store value, to make LED playback snappier 
-    uint32_t LEDcodePlay = 0;     // calculate it once and store value, to make LED playback snappier
-    uint32_t LEDcodeRest = 0;     // calculate it once and store value, to make LED playback snappier
-    uint32_t LEDcodeOff = 0;      // calculate it once and store value, to make LED playback snappier
-    uint32_t LEDcodeDim = 0;      // calculate it once and store value, to make LED playback snappier
+    int   coordRow = 0;        // hex coordinates
+    int   coordCol = 0;        // hex coordinates
+    timeStamp timePressed = 0;     // timecode of last press
+    colorCode LEDcodeAnim = 0;     // calculate it once and store value, to make LED playback snappier 
+    colorCode LEDcodePlay = 0;     // calculate it once and store value, to make LED playback snappier
+    colorCode LEDcodeRest = 0;     // calculate it once and store value, to make LED playback snappier
+    colorCode LEDcodeOff = 0;      // calculate it once and store value, to make LED playback snappier
+    colorCode LEDcodeDim = 0;      // calculate it once and store value, to make LED playback snappier
     bool     animate = 0;         // hex is flagged as part of the animation in this frame, helps make animations smoother
-    int16_t  stepsFromC = 0;      // number of steps from C4 (semitones in 12EDO; microtones if >12EDO)
+    int      stepsFromC = 0;      // number of steps from C4 (semitones in 12EDO; microtones if >12EDO)
     bool     isCmd = 0;           // 0 if it's a MIDI note; 1 if it's a MIDI control cmd
     bool     inScale = 0;         // 0 if it's not in the selected scale; 1 if it is
     byte     note = UNUSED_NOTE;  // MIDI note or control parameter corresponding to this hex
-    int16_t  bend = 0;            // in microtonal mode, the pitch bend for this note needed to be tuned correctly
+    int      bend = 0;            // in microtonal mode, the pitch bend for this note needed to be tuned correctly
     byte     MIDIch = 0;          // what MIDI channel this note is playing on
     byte     synthCh = 0;         // what synth polyphony ch this is playing on
     float    frequency = 0.0;     // what frequency to ring on the synther
@@ -1068,14 +1023,7 @@
       }
     }   
   };
-  const byte mPin[] = { 
-    MPLEX_1_PIN, MPLEX_2_PIN, MPLEX_4_PIN, MPLEX_8_PIN 
-  };
-  const byte cPin[] = { 
-    COLUMN_PIN_0, COLUMN_PIN_1, COLUMN_PIN_2, COLUMN_PIN_3,
-    COLUMN_PIN_4, COLUMN_PIN_5, COLUMN_PIN_6, 
-    COLUMN_PIN_7, COLUMN_PIN_8, COLUMN_PIN_9 
-  };
+
   const byte assignCmd[] = { 
     CMDBTN_0, CMDBTN_1, CMDBTN_2, CMDBTN_3, 
     CMDBTN_4, CMDBTN_5, CMDBTN_6
@@ -1083,54 +1031,47 @@
 
   /*
     define h, which is a collection of all the 
-    buttons from 0 to 139. h[i] refers to the 
+    buttons from 0 to 139. hex[i] refers to the 
     button with the LED address = i.
   */
-  buttonDef h[BTN_COUNT];
-  
+
+  buttonDef hex[BTN_COUNT];
+  int_vec readHexState;
+
   wheelDef modWheel = { &wheelMode, &modSticky,
-    &h[assignCmd[4]].btnState, &h[assignCmd[5]].btnState, &h[assignCmd[6]].btnState,
+    &hex[assignCmd[4]].btnState, &hex[assignCmd[5]].btnState, &hex[assignCmd[6]].btnState,
     0, 127, &modWheelSpeed, 0, 0, 0, 0
   };
   wheelDef pbWheel =  { &wheelMode, &pbSticky, 
-    &h[assignCmd[4]].btnState, &h[assignCmd[5]].btnState, &h[assignCmd[6]].btnState,
+    &hex[assignCmd[4]].btnState, &hex[assignCmd[5]].btnState, &hex[assignCmd[6]].btnState,
     -8192, 8191, &pbWheelSpeed, 0, 0, 0, 0
   };
   wheelDef velWheel = { &wheelMode, &velSticky, 
-    &h[assignCmd[0]].btnState, &h[assignCmd[1]].btnState, &h[assignCmd[2]].btnState,
+    &hex[assignCmd[0]].btnState, &hex[assignCmd[1]].btnState, &hex[assignCmd[2]].btnState,
     0, 127, &velWheelSpeed, 96, 96, 96, 0
   };
   
   bool toggleWheel = 0; // 0 for mod, 1 for pb
 
-  void setupPins() {
-    for (byte p = 0; p < sizeof(cPin); p++) { // For each column pin...
-      pinMode(cPin[p], INPUT_PULLUP);         // set the pinMode to INPUT_PULLUP (+3.3V / HIGH).
-    }
-    for (byte p = 0; p < sizeof(mPin); p++) { // For each column pin...
-      pinMode(mPin[p], OUTPUT);               // Setting the row multiplexer pins to output.
-    }
-    sendToLog("Pins mounted");
-  }
-
   void setupGrid() {
+    readHexState.resize(BTN_COUNT);
     for (byte i = 0; i < BTN_COUNT; i++) {
-      h[i].coordRow = (i / 10);
-      h[i].coordCol = (2 * (i % 10)) + (h[i].coordRow & 1);
-      h[i].isCmd = 0;
-      h[i].note = UNUSED_NOTE;
-      h[i].btnState = 0;
+      hex[i].coordRow = (i / 10);
+      hex[i].coordCol = (2 * (i % 10)) + (hex[i].coordRow & 1);
+      hex[i].isCmd = 0;
+      hex[i].note = UNUSED_NOTE;
+      hex[i].btnState = 0;
     }
     for (byte c = 0; c < CMDCOUNT; c++) {
-      h[assignCmd[c]].isCmd = 1;
-      h[assignCmd[c]].note = CMDB + c;
+      hex[assignCmd[c]].isCmd = 1;
+      hex[assignCmd[c]].note = CMDB + c;
     }
     // "flag" buttons
     for (byte i = 140; i < BTN_COUNT; i++) {
-      h[i].isCmd = 1;
+      hex[i].isCmd = 1;
     }
     // On version 1.2, "button" 140 is shorted (always connected)
-    h[140].note = HARDWARE_V1_2;
+    hex[140].note = HARDWARE_V1_2;
   }
 
 // @LED
@@ -1192,10 +1133,10 @@
     codes remain in the object until this routine is called again.
   */
   void setLEDcolorCodes() {
-    for (byte i = 0; i < LED_COUNT; i++) {
-      if (!(h[i].isCmd)) {
+    for (auto &h : hex) {
+      if (!(h.isCmd)) {
         colorDef setColor;
-        byte paletteIndex = positiveMod(h[i].stepsFromC,current.tuning().cycleLength);
+        byte paletteIndex = positiveMod(h.stepsFromC,current.tuning().cycleLength);
         if (paletteBeginsAtKeyCenter) {
           paletteIndex = current.keyDegree(paletteIndex);
         }
@@ -1237,12 +1178,12 @@
               (byte)(cents ? VALUE_SHADE : VALUE_NORMAL) };
             break;
         }
-        h[i].LEDcodeRest   = getLEDcode(setColor);
-        h[i].LEDcodePlay = getLEDcode(setColor.tint()); 
-        h[i].LEDcodeDim  = getLEDcode(setColor.shade());  
+        h.LEDcodeRest = getLEDcode(setColor);
+        h.LEDcodePlay = getLEDcode(setColor.tint()); 
+        h.LEDcodeDim  = getLEDcode(setColor.shade());  
         setColor = {HUE_NONE,SAT_BW,VALUE_BLACK};
-        h[i].LEDcodeOff  = getLEDcode(setColor);                // turn off entirely
-        h[i].LEDcodeAnim = h[i].LEDcodePlay;
+        h.LEDcodeOff  = getLEDcode(setColor);                // turn off entirely
+        h.LEDcodeAnim = h.LEDcodePlay;
       }
     }
     sendToLog("LED codes re-calculated.");
@@ -1298,11 +1239,11 @@
     }
   }
   uint32_t applyNotePixelColor(byte x) {
-           if (h[x].animate) { return h[x].LEDcodeAnim;
-    } else if (h[x].MIDIch)  { return h[x].LEDcodePlay;
-    } else if (h[x].inScale) { return h[x].LEDcodeRest;
-    } else if (scaleLock)    { return h[x].LEDcodeOff;
-    } else                   { return h[x].LEDcodeDim;
+           if (hex[x].animate) { return hex[x].LEDcodeAnim;
+    } else if (hex[x].MIDIch)  { return hex[x].LEDcodePlay;
+    } else if (hex[x].inScale) { return hex[x].LEDcodeRest;
+    } else if (scaleLock)    { return hex[x].LEDcodeOff;
+    } else                   { return hex[x].LEDcodeDim;
     }
   }
   void setupLEDs() { 
@@ -1313,7 +1254,7 @@
   }
   void lightUpLEDs() {   
     for (byte i = 0; i < LED_COUNT; i++) {      
-      if (!(h[i].isCmd)) {
+      if (!(hex[i].isCmd)) {
         strip.setPixelColor(i,applyNotePixelColor(i));
       }
     }
@@ -1343,6 +1284,11 @@
     or two semitones.
   */
   #define PITCH_BEND_SEMIS 2
+  /*
+    We use pitch bends to retune notes in MPE mode.
+    Some setups can adjust to fit this, but some need us to adjust it.
+  */
+  byte MPEpitchBendSemis = 2;
   /*
     Create a new instance of the Arduino MIDI Library,
     and attach usb_midi as the transport.
@@ -1444,7 +1390,7 @@
     for (byte i = 1; i <= 16; i++) {
       if(midiD&MIDID_USB)UMIDI.sendControlChange(123, 0, i);
       if(midiD&MIDID_SER)SMIDI.sendControlChange(123, 0, i);
-      setPitchBendRange(i, PITCH_BEND_SEMIS);   
+      setPitchBendRange(i, MPEpitchBendSemis);   
     }
   }
 
@@ -1458,59 +1404,6 @@
     if(midiD&MIDID_USB)UMIDI.sendPitchBend(pbWheel.curValue, 1);
     if(midiD&MIDID_SER)SMIDI.sendPitchBend(pbWheel.curValue, 1);
     sendToLog("sent pb wheel value " + std::to_string(pbWheel.curValue) + " to ch 1");
-  }
-  
-  void tryMIDInoteOn(byte x) {
-    // this gets called on any non-command hex
-    // that is not scale-locked.
-    if (!(h[x].MIDIch)) {    
-      if (MPEpitchBendsNeeded == 1) {
-        h[x].MIDIch = 1;
-      } else if (MPEpitchBendsNeeded <= 15) {
-        h[x].MIDIch = 2 + positiveMod(h[x].stepsFromC, MPEpitchBendsNeeded);
-      } else {
-        if (MPEchQueue.empty()) {   // if there aren't any open channels
-          sendToLog("MPE queue was empty so did not play a midi note");
-        } else {
-          h[x].MIDIch = MPEchQueue.front();   // value in MIDI terms (1-16)
-          MPEchQueue.pop();
-          sendToLog("popped " + std::to_string(h[x].MIDIch) + " off the MPE queue");
-        }
-      }
-      if (h[x].MIDIch) {
-        if(midiD&MIDID_USB)UMIDI.sendNoteOn(h[x].note, velWheel.curValue, h[x].MIDIch); // ch 1-16
-        if(midiD&MIDID_SER)SMIDI.sendNoteOn(h[x].note, velWheel.curValue, h[x].MIDIch); // ch 1-16
-
-        if(midiD&MIDID_USB)UMIDI.sendPitchBend(h[x].bend, h[x].MIDIch); // ch 1-16
-        if(midiD&MIDID_SER)SMIDI.sendPitchBend(h[x].bend, h[x].MIDIch); // ch 1-16
-        sendToLog(
-          "sent MIDI noteOn: " + std::to_string(h[x].note) +
-          " pb "  + std::to_string(h[x].bend) +
-          " vel " + std::to_string(velWheel.curValue) +
-          " ch "  + std::to_string(h[x].MIDIch)
-        );
-      } 
-    }
-  } 
-
-  void tryMIDInoteOff(byte x) {
-    // this gets called on any non-command hex
-    // that is not scale-locked.
-    if (h[x].MIDIch) {    // but just in case, check
-      if(midiD&MIDID_USB)UMIDI.sendNoteOff(h[x].note, velWheel.curValue, h[x].MIDIch);
-      if(midiD&MIDID_SER)SMIDI.sendNoteOff(h[x].note, velWheel.curValue, h[x].MIDIch);
-      sendToLog(
-        "sent note off: " + std::to_string(h[x].note) +
-        " pb " + std::to_string(h[x].bend) +
-        " vel " + std::to_string(velWheel.curValue) +
-        " ch " + std::to_string(h[x].MIDIch)
-      );
-      if (MPEpitchBendsNeeded > 15) {
-        MPEchQueue.push(h[x].MIDIch);
-        sendToLog("pushed " + std::to_string(h[x].MIDIch) + " on the MPE queue");
-      }
-      h[x].MIDIch = 0;
-    }
   }
 
   void setupMIDI() {
@@ -1528,19 +1421,6 @@
     headphone jack (on hardware v1.2 only)
   */
   #include "hardware/pwm.h"       // library of code to access the processor's built in pulse wave modulation features
-  #include "hardware/irq.h"       // library of code to let you interrupt code execution to run something of higher priority
-  /*
-    It is more convenient to pre-define the correct
-    pulse wave modulation slice and channel associated
-    with the PIEZO_PIN on this processor (see RP2040
-    manual) than to have it looked up each time.
-  */
-  #define PIEZO_PIN 23
-  #define PIEZO_SLICE 3
-  #define PIEZO_CHNL 1
-  #define AJACK_PIN 25
-  #define AJACK_SLICE 4
-  #define AJACK_CHNL 1
   // midiD takes the following bitwise flags
   #define AUDIO_NONE 0
   #define AUDIO_PIEZO 1
@@ -1633,7 +1513,10 @@
     the resulting audio becomes unstable and
     inaccurate. 
   */
-  #define POLL_INTERVAL_IN_MICROSECONDS 24
+
+  constexpr uint audio_sample_in_uS = 2 * frequency_poll;
+  constexpr uint audio_sample_rate  = 1'000'000 / audio_sample_in_uS;
+
   /*
     Eight voice polyphony can be simulated. 
     Any more voices and the
@@ -1650,20 +1533,13 @@
   */
   #define POLYPHONY_LIMIT 8
   /*
-    This defines which hardware alarm
-    and interrupt address are used
-    to time the call of the poll() function.
-  */
-  #define ALARM_NUM 2
-  #define ALARM_IRQ TIMER_IRQ_2
-  /*
     A basic EQ level can be stored to perform
     simple loudness adjustments at certain
     frequencies where human hearing is sensitive.
 
     By default it's off but you can change this
     flag to "true" to enable it. This may also
-    be moved to a Testing menu option.
+    be moved to a Advanced menu option.
   */
   #define EQUAL_LOUDNESS_ADJUST true
   /*
@@ -1696,14 +1572,12 @@
   std::queue<byte> synthChQueue;
   const byte attenuation[] = {64,24,17,14,12,11,10,9,8}; // full volume in mono mode; equalized volume in poly.
 
-  byte arpeggiatingNow = UNUSED_NOTE;         // if this is 255, set to off (0% duty cycle)
-  uint64_t arpeggiateTime = 0;                // Used to keep track of when this note started playing in ARPEG mode
-  uint64_t arpeggiateLength = 65536;         // in microseconds. approx a 1/32 note at 114 BPM
+//  buttonDef * arpeggiatingNow = nullptr;
+//  uint64_t arpeggiateTime = 0;                // Used to keep track of when this note started playing in ARPEG mode
+//  uint64_t arpeggiateLength = 65536;         // in microseconds. approx a 1/32 note at 114 BPM
 
   // RUN ON CORE 2
-  void poll() {
-    hw_clear_bits(&timer_hw->intr, 1u << ALARM_NUM);
-    timer_hw->alarm[ALARM_NUM] = readClock() + POLL_INTERVAL_IN_MICROSECONDS;
+  void audioPoll() {
     uint32_t mix = 0;
     byte voices = POLYPHONY_LIMIT;
     uint16_t p;
@@ -1740,8 +1614,9 @@
     mix *= attenuation[(playbackMode == SYNTH_POLY) * voices]; // [19bit]*atten[6bit] = [25bit]
     mix *= velWheel.curValue; // [25bit]*vel[7bit]=[32bit], poly+ 
     level = mix >> 24;  // [32bit] - [8bit] = [24bit]
-    if(audioD&AUDIO_PIEZO)pwm_set_chan_level(PIEZO_SLICE, PIEZO_CHNL, level);
-    if(audioD&AUDIO_AJACK)pwm_set_chan_level(AJACK_SLICE, AJACK_CHNL, level);
+    for (auto pin : pwmPins) {
+      pwm_set_gpio_level(pin, level);
+    }
   }
   // RUN ON CORE 1
   byte isoTwoTwentySix(float f) {
@@ -1775,9 +1650,13 @@
   }
   void setSynthFreq(float frequency, byte channel) {
     byte c = channel - 1;
+    if (frequency == 0) {
+      synth[c].increment = 0;
+      return;
+    }
     float f = frequency * exp2(pbWheel.curValue * PITCH_BEND_SEMIS / 98304.0);
     synth[c].counter = 0;
-    synth[c].increment = round(f * POLL_INTERVAL_IN_MICROSECONDS * 0.065536);   // cycle 0-65535 at resultant frequency
+    synth[c].increment = round(f * audio_sample_in_uS * 0.065536);   // cycle 0-65535 at resultant frequency
     synth[c].eq = isoTwoTwentySix(f);
     if (currWave == WAVEFORM_HYBRID) {
       if (f < TRANSITION_SQUARE) {
@@ -1806,42 +1685,46 @@
       synth[c].cd = 65535 / (256 - synth[c].c);
     }
   }
-
+/*
   // USE THIS IN MONO OR ARPEG MODE ONLY
-
-  byte findNextHeldNote() {
-    byte n = UNUSED_NOTE;
-    for (byte i = 1; i <= BTN_COUNT; i++) {
-      byte j = positiveMod(arpeggiatingNow + i, BTN_COUNT);
-      if ((h[j].MIDIch) && (!h[j].isCmd)) {
-        n = j;
-        break;
+  buttonDef* findNextHeldNote() {
+    //traverse to end
+    buttonDef* begin{hex};
+    buttonDef* end{hex + std::size(hex)};
+    for (buttonDef* iter = arpeggiatingNow; iter != end; ++iter) {
+      if ((iter->MIDIch) && (!(iter->isCmd))) {
+        return iter;
       }
     }
-    return n;
+    for (buttonDef* iter = begin; iter != arpeggiatingNow; ++iter) {
+      if ((iter->MIDIch) && (!(iter->isCmd))) {
+        return iter;
+      }
+    }
+    return nullptr;
   }
-  void replaceMonoSynthWith(byte x) {
-    if (arpeggiatingNow == x) return;
-    h[arpeggiatingNow].synthCh = 0;
-    arpeggiatingNow = x;
-    if (arpeggiatingNow != UNUSED_NOTE) {
-      h[arpeggiatingNow].synthCh = 1;
-      setSynthFreq(h[arpeggiatingNow].frequency, 1);
+  void replaceMonoSynthWith(buttonDef& h) {
+    if (arpeggiatingNow == &h) return;
+    arpeggiatingNow->synthCh = 0;
+    arpeggiatingNow = &h;
+    if (arpeggiatingNow != nullptr) {
+      h.synthCh = 1;
+      setSynthFreq(h.frequency, 1);
     } else {
       setSynthFreq(0, 1);
     }
   }
-
+*/
   void resetSynthFreqs() {
     while (!synthChQueue.empty()) {
       synthChQueue.pop();
     }
-    for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
-      synth[i].increment = 0;
-      synth[i].counter = 0;
+    for (auto &v : synth) {
+      v.increment = 0;
+      v.counter = 0;
     }
-    for (byte i = 0; i < BTN_COUNT; i++) {
-      h[i].synthCh = 0;
+    for (auto &h : hex) {
+      h.synthCh = 0;
     }
     if (playbackMode == SYNTH_POLY) {
       for (byte i = 0; i < POLYPHONY_LIMIT; i++) {
@@ -1853,76 +1736,35 @@
     if(midiD&MIDID_USB)UMIDI.sendProgramChange(programChange - 1, 1);
     if(midiD&MIDID_SER)SMIDI.sendProgramChange(programChange - 1, 1);
   }
-  
   void updateSynthWithNewFreqs() {
     if(midiD&MIDID_USB)UMIDI.sendPitchBend(pbWheel.curValue, 1);
     if(midiD&MIDID_SER)SMIDI.sendPitchBend(pbWheel.curValue, 1);
-    for (byte i = 0; i < BTN_COUNT; i++) {
-      if (!(h[i].isCmd)) {
-        if (h[i].synthCh) {
-          setSynthFreq(h[i].frequency,h[i].synthCh);           // pass all notes thru synth again if the pitch bend changes
+    for (auto &h : hex) {
+      if (!(h.isCmd)) {
+        if (h.synthCh) {
+          setSynthFreq(h.frequency,h.synthCh);           // pass all notes thru synth again if the pitch bend changes
         }
       }
     }
   }
-  
-  void trySynthNoteOn(byte x) {
-    if (playbackMode != SYNTH_OFF) {
-      if (playbackMode == SYNTH_POLY) {
-        // operate independently of MIDI
-        if (synthChQueue.empty()) {
-          sendToLog("synth channels all firing, so did not add one");
-        } else {
-          h[x].synthCh = synthChQueue.front();
-          synthChQueue.pop();
-          sendToLog("popped " + std::to_string(h[x].synthCh) + " off the synth queue");
-          setSynthFreq(h[x].frequency, h[x].synthCh);
-        }
-      } else {    
-        // operate in lockstep with MIDI
-        if (h[x].MIDIch) {
-          replaceMonoSynthWith(x);
-        }
-      }
+  void setupSynth(int_vec pins) {
+    for (auto pin : pins) {
+      uint8_t slice = pwm_gpio_to_slice_num(pin);
+      gpio_set_function(pin, GPIO_FUNC_PWM);      // set that pin as PWM
+      pwm_set_phase_correct(slice, true);           // phase correct sounds better
+      pwm_set_wrap(slice, 254);                     // 0 - 254 allows 0 - 255 level
+      pwm_set_clkdiv(slice, 1.0f);                  // run at full clock speed
+      pwm_set_gpio_level(pin, 0);        // initialize at zero to prevent whining sound
+      pwm_set_enabled(slice, true);                 // ENGAGE!
     }
-  }
-
-  void trySynthNoteOff(byte x) {
-    if (playbackMode && (playbackMode != SYNTH_POLY)) {
-      if (arpeggiatingNow == x) {
-        replaceMonoSynthWith(findNextHeldNote());
-      }
-    }
-    if (playbackMode == SYNTH_POLY) {
-      if (h[x].synthCh) {
-        setSynthFreq(0, h[x].synthCh);
-        synthChQueue.push(h[x].synthCh);
-        h[x].synthCh = 0;
-      }
-    }
-  }
-
-  void setupSynth(byte pin, byte slice) {
-    gpio_set_function(pin, GPIO_FUNC_PWM);      // set that pin as PWM
-    pwm_set_phase_correct(slice, true);           // phase correct sounds better
-    pwm_set_wrap(slice, 254);                     // 0 - 254 allows 0 - 255 level
-    pwm_set_clkdiv(slice, 1.0f);                  // run at full clock speed
-    pwm_set_chan_level(slice, PIEZO_CHNL, 0);        // initialize at zero to prevent whining sound
-    pwm_set_enabled(slice, true);                 // ENGAGE!
-    hw_set_bits(&timer_hw->inte, 1u << ALARM_NUM);  // initialize the timer
-    irq_set_exclusive_handler(ALARM_IRQ, poll);     // function to run every interrupt
-    irq_set_enabled(ALARM_IRQ, true);               // ENGAGE!
-    timer_hw->alarm[ALARM_NUM] = readClock() + POLL_INTERVAL_IN_MICROSECONDS;
     resetSynthFreqs();
-    sendToLog("synth is ready.");
   }
-
   void arpeggiate() {
     if (playbackMode == SYNTH_ARPEGGIO) {
-      if (runTime - arpeggiateTime > arpeggiateLength) {
-        arpeggiateTime = runTime;
-        replaceMonoSynthWith(findNextHeldNote());
-      }
+    //  if (runTime - arpeggiateTime > arpeggiateLength) {
+     //   arpeggiateTime = runTime;
+    //    replaceMonoSynthWith(*findNextHeldNote());
+    //  }
     }
   }
 
@@ -1950,12 +1792,11 @@
   int8_t vertical[] =   { 0,-1,-1, 0, 1, 1};
   int8_t horizontal[] = { 2, 1,-1,-2,-1, 1};
 
-  uint64_t animFrame(byte x) {     
-    if (h[x].timePressed) {          // 2^20 microseconds is close enough to 1 second
-      return 1 + (((runTime - h[x].timePressed) * animationFPS) >> 20);
-    } else {
+  uint64_t animFrame(timeStamp t) {     
+    if (t == 0) {
       return 0;
-    }
+    }          // 2^20 microseconds is close enough to 1 second
+    return 1 + (((runTime - t) * animationFPS) >> 20);
   }
   void flagToAnimate(int8_t r, int8_t c) {
     if (! 
@@ -1964,44 +1805,42 @@
         || ( ( c + r ) & 1 )
       )
     ) {
-      h[(10 * r) + (c / 2)].animate = 1;
+      hex[(10 * r) + (c / 2)].animate = 1;
     }
   }
   void animateMirror() {
-    for (byte i = 0; i < LED_COUNT; i++) {                      // check every hex
-      if ((!(h[i].isCmd)) && (h[i].MIDIch)) {                   // that is a held note     
-        for (byte j = 0; j < LED_COUNT; j++) {                  // compare to every hex
-          if ((!(h[j].isCmd)) && (!(h[j].MIDIch))) {            // that is a note not being played
-            int16_t temp = h[i].stepsFromC - h[j].stepsFromC;   // look at difference between notes
+    for (auto &h : hex) {                      // check every hex
+      if ((!(h.isCmd)) && (h.MIDIch)) {                   // that is a held note     
+        for (auto &n : hex) {                  // compare to every hex
+          if ((!(n.isCmd)) && (!(n.MIDIch))) {            // that is a note not being played
+            int16_t temp = h.stepsFromC - n.stepsFromC;   // look at difference between notes
             if (animationType == ANIMATE_OCTAVE) {              // set octave diff to zero if need be
               temp = positiveMod(temp, current.tuning().cycleLength);
             }
             if (temp == 0) {                                    // highlight if diff is zero
-              h[j].animate = 1;
+              n.animate = 1;
             }
           }
         }  
       }
     }
   }
-
   void animateOrbit() {
-    for (byte i = 0; i < LED_COUNT; i++) {                               // check every hex
-      if ((!(h[i].isCmd)) && (h[i].MIDIch) && ((h[i].inScale) || (!scaleLock))) {    // that is a held note
-        byte tempDir = (animFrame(i) % 6);
-        flagToAnimate(h[i].coordRow + vertical[tempDir], h[i].coordCol + horizontal[tempDir]);       // different neighbor each frame
+    for (auto &h : hex) {                               // check every hex
+      if ((!(h.isCmd)) && (h.MIDIch) && ((h.inScale) || (!scaleLock))) {    // that is a held note
+        byte tempDir = (animFrame(h.timePressed) % 6);
+        flagToAnimate(h.coordRow + vertical[tempDir], h.coordCol + horizontal[tempDir]);       // different neighbor each frame
       }
     }
   }
-
   void animateRadial() {
-    for (byte i = 0; i < LED_COUNT; i++) {                                // check every hex
-      if (!(h[i].isCmd) && (h[i].inScale || !scaleLock)) {                                                // that is a note
-        uint64_t radius = animFrame(i);
+    for (auto &h : hex) {                                // check every hex
+      if (!(h.isCmd) && (h.inScale || !scaleLock)) {                                                // that is a note
+        uint64_t radius = animFrame(h.timePressed);
         if ((radius > 0) && (radius < 16)) {                              // played in the last 16 frames
           byte steps = ((animationType == ANIMATE_SPLASH) ? radius : 1);  // star = 1 step to next corner; ring = 1 step per hex
-          int8_t turtleRow = h[i].coordRow + (radius * vertical[HEX_DIRECTION_SW]);
-          int8_t turtleCol = h[i].coordCol + (radius * horizontal[HEX_DIRECTION_SW]);
+          int8_t turtleRow = h.coordRow + (radius * vertical[HEX_DIRECTION_SW]);
+          int8_t turtleCol = h.coordCol + (radius * horizontal[HEX_DIRECTION_SW]);
           for (byte dir = HEX_DIRECTION_EAST; dir < 6; dir++) {           // walk along the ring in each of the 6 hex directions
             for (byte i = 0; i < steps; i++) {                            // # of steps to the next corner 
               flagToAnimate(turtleRow,turtleCol);                         // flag for animation
@@ -2014,8 +1853,8 @@
     }    
   }
   void animateLEDs() {  
-    for (byte i = 0; i < LED_COUNT; i++) {      
-      h[i].animate = 0;
+    for (auto &h : hex) {      
+      h.animate = 0;
     }
     if (animationType) {
       switch (animationType) { 
@@ -2045,29 +1884,29 @@
   void assignPitches() {     
     sendToLog("assignPitch was called:");
     for (byte i = 0; i < LED_COUNT; i++) {
-      if (!(h[i].isCmd)) {
+      if (!(hex[i].isCmd)) {
         // steps is the distance from C
         // the stepsToMIDI function needs distance from A4
         // it also needs to reflect any transposition, but
         // NOT the key of the scale.
-        float N = stepsToMIDI(current.pitchRelToA4(h[i].stepsFromC));
+        float N = stepsToMIDI(current.pitchRelToA4(hex[i].stepsFromC));
         if (N < 0 || N >= 128) {
-          h[i].note = UNUSED_NOTE;
-          h[i].bend = 0;
-          h[i].frequency = 0.0;
+          hex[i].note = UNUSED_NOTE;
+          hex[i].bend = 0;
+          hex[i].frequency = 0.0;
         } else {
-          h[i].note = ((N >= 127) ? 127 : round(N));
-          h[i].bend = (ldexp(N - h[i].note, 13) / PITCH_BEND_SEMIS);
-          h[i].frequency = MIDItoFreq(N);
+          hex[i].note = ((N >= 127) ? 127 : round(N));
+          hex[i].bend = (ldexp(N - hex[i].note, 13) / MPEpitchBendSemis);
+          hex[i].frequency = MIDItoFreq(N);
         }
         sendToLog(
           "hex #" + std::to_string(i) + ", " +
-          "steps=" + std::to_string(h[i].stepsFromC) + ", " +
-          "isCmd? " + std::to_string(h[i].isCmd) + ", " +
-          "note=" + std::to_string(h[i].note) + ", " + 
-          "bend=" + std::to_string(h[i].bend) + ", " + 
-          "freq=" + std::to_string(h[i].frequency) + ", " + 
-          "inScale? " + std::to_string(h[i].inScale) + "."
+          "steps=" + std::to_string(hex[i].stepsFromC) + ", " +
+          "isCmd? " + std::to_string(hex[i].isCmd) + ", " +
+          "note=" + std::to_string(hex[i].note) + ", " + 
+          "bend=" + std::to_string(hex[i].bend) + ", " + 
+          "freq=" + std::to_string(hex[i].frequency) + ", " + 
+          "inScale? " + std::to_string(hex[i].inScale) + "."
         );
       }
     }
@@ -2076,13 +1915,13 @@
   void applyScale() {
     sendToLog("applyScale was called:");
     for (byte i = 0; i < LED_COUNT; i++) {
-      if (!(h[i].isCmd)) {
+      if (!(hex[i].isCmd)) {
         if (current.scale().tuning == ALL_TUNINGS) {
-          h[i].inScale = 1;
+          hex[i].inScale = 1;
         } else {
-          byte degree = current.keyDegree(h[i].stepsFromC); 
+          byte degree = current.keyDegree(hex[i].stepsFromC); 
           if (degree == 0) {
-            h[i].inScale = 1;    // the root is always in the scale
+            hex[i].inScale = 1;    // the root is always in the scale
           } else {
             byte tempSum = 0;
             byte iterator = 0;
@@ -2090,15 +1929,15 @@
               tempSum += current.scale().pattern[iterator];
               iterator++;
             }  // add the steps in the scale, and you're in scale
-            h[i].inScale = (tempSum == degree);   // if the note lands on one of those sums
+            hex[i].inScale = (tempSum == degree);   // if the note lands on one of those sums
           }
         }
         sendToLog(
           "hex #" + std::to_string(i) + ", " +
-          "steps=" + std::to_string(h[i].stepsFromC) + ", " +
-          "isCmd? " + std::to_string(h[i].isCmd) + ", " +
-          "note=" + std::to_string(h[i].note) + ", " + 
-          "inScale? " + std::to_string(h[i].inScale) + "."
+          "steps=" + std::to_string(hex[i].stepsFromC) + ", " +
+          "isCmd? " + std::to_string(hex[i].isCmd) + ", " +
+          "note=" + std::to_string(hex[i].note) + ", " + 
+          "inScale? " + std::to_string(hex[i].inScale) + "."
         );
       }
     }
@@ -2108,10 +1947,10 @@
   void applyLayout() {       // call this function when the layout changes
     sendToLog("buildLayout was called:");
     for (byte i = 0; i < LED_COUNT; i++) {
-      if (!(h[i].isCmd)) {        
-        int8_t distCol = h[i].coordCol - h[current.layout().hexMiddleC].coordCol;
-        int8_t distRow = h[i].coordRow - h[current.layout().hexMiddleC].coordRow;
-        h[i].stepsFromC = (
+      if (!(hex[i].isCmd)) {        
+        int8_t distCol = hex[i].coordCol - hex[current.layout().hexMiddleC].coordCol;
+        int8_t distRow = hex[i].coordRow - hex[current.layout().hexMiddleC].coordRow;
+        hex[i].stepsFromC = (
           (distCol * current.layout().acrossSteps) + 
           (distRow * (
             current.layout().acrossSteps + 
@@ -2120,7 +1959,7 @@
         ) / 2;  
         sendToLog(
           "hex #" + std::to_string(i) + ", " +
-          "steps from C4=" + std::to_string(h[i].stepsFromC) + "."
+          "steps from C4=" + std::to_string(hex[i].stepsFromC) + "."
         );
       }
     }
@@ -2128,13 +1967,13 @@
     assignPitches();     // same with pitches
     sendToLog("buildLayout complete.");
   }
-  void cmdOn(byte x) {   // volume and mod wheel read all current buttons
-    switch (h[x].note) {
+  void cmdOn(byte n) {   // volume and mod wheel read all current buttons
+    switch (n) {
       case CMDB + 3:
         toggleWheel = !toggleWheel;
         break;
       case HARDWARE_V1_2:
-        Hardware_Version = h[x].note;
+        Hardware_Version = n;
         setupHardware();
         break;
       default:
@@ -2142,8 +1981,8 @@
         break;
     }
   }
-  void cmdOff(byte x) {   // pitch bend wheel only if buttons held.
-    switch (h[x].note) {
+  void cmdOff(byte n) {   // pitch bend wheel only if buttons held.
+    switch (n) {
       default:
         break;  // nothing; should all be taken care of within the wheelDef structure
     }
@@ -2178,8 +2017,8 @@
     MENU_ITEM_HEIGHT, MENU_PAGE_SCREEN_TOP_OFFSET, MENU_VALUES_LEFT_OFFSET
   );
   bool screenSaverOn = 0;                         
-  uint64_t screenTime = 0;                        // GFX timer to count if screensaver should go on
-  const uint64_t screenSaverTimeout = (1u << 23); // 2^23 microseconds ~ 8 seconds
+  timeStamp screenTime = 0;                        // GFX timer to count if screensaver should go on
+  const timeStamp screenSaverTimeout = (1u << 23); // 2^23 microseconds ~ 8 seconds
   /*
     Create menu page object of class GEMPage. 
     Menu page holds menu items (GEMItem) and represents menu level.
@@ -2210,9 +2049,9 @@
   GEMPage  menuPageControl("Control wheel");
   GEMItem  menuGotoControl("Control wheel", menuPageControl);
   GEMItem  menuControlBack("<< Back", menuPageMain);
-  GEMPage  menuPageTesting("Advanced");
-  GEMItem  menuGotoTesting("Advanced", menuPageTesting);
-  GEMItem  menuTestingBack("<< Back", menuPageMain);
+  GEMPage  menuPageAdvanced("Advanced");
+  GEMItem  menuGotoAdvanced("Advanced", menuPageAdvanced);
+  GEMItem  menuAdvancedBack("<< Back", menuPageMain);
   GEMPage  menuPageReboot("Ready to flash firmware!");
   /*
     We haven't written the code for some procedures,
@@ -2285,12 +2124,19 @@
     The fact that GEM expects pointers and references makes it tricky
     to work with if you are new to C++.
   */
+  SelectOptionByte optionByteMPEpitchBend[] = { { "2", 2}, {"12", 12}, {"24", 24}, {"48", 48}, {"96", 96} };
+  GEMSelect selectMPEpitchBend( sizeof(optionByteMPEpitchBend) / sizeof(SelectOptionByte), optionByteMPEpitchBend);
+  GEMItem menuItemMPEpitchBend( "MPE Bend Range:", MPEpitchBendSemis, selectMPEpitchBend, assignPitches);
+
   SelectOptionByte optionByteYesOrNo[] =  { { "No", 0 }, { "Yes" , 1 } };
   GEMSelect selectYesOrNo( sizeof(optionByteYesOrNo)  / sizeof(SelectOptionByte), optionByteYesOrNo);
   GEMItem  menuItemScaleLock( "Scale lock?", scaleLock, selectYesOrNo);
   GEMItem  menuItemPercep( "Fix color:", perceptual, selectYesOrNo, setLEDcolorCodes);
   GEMItem  menuItemShiftColor( "ColorByKey", paletteBeginsAtKeyCenter, selectYesOrNo, setLEDcolorCodes);
   GEMItem  menuItemWheelAlt( "Alt wheel?", wheelMode, selectYesOrNo);
+
+  bool rotaryInvert = false;
+  GEMItem  menuItemRotary( "Invert Encoder:", rotaryInvert);
 
   SelectOptionByte optionByteWheelType[] = { { "Springy", 0 }, { "Sticky", 1} };
   GEMSelect selectWheelType( sizeof(optionByteWheelType) / sizeof(SelectOptionByte), optionByteWheelType);
@@ -2423,28 +2269,8 @@
   GEMSelect selectGeneralMidi(sizeof(optionByteGeneralMidi) / sizeof(SelectOptionByte), optionByteGeneralMidi);
   GEMItem  menuItemGeneralMidi("GeneralMidi:", programChange,  selectGeneralMidi, sendProgramChange);
 
-
-  // doing this long-hand because the STRUCT has problems accepting string conversions of numbers for some reason
-  SelectOptionInt optionIntTransposeSteps[] = {
-    {"-127",-127},{"-126",-126},{"-125",-125},{"-124",-124},{"-123",-123},{"-122",-122},{"-121",-121},{"-120",-120},{"-119",-119},{"-118",-118},{"-117",-117},{"-116",-116},{"-115",-115},{"-114",-114},{"-113",-113},
-    {"-112",-112},{"-111",-111},{"-110",-110},{"-109",-109},{"-108",-108},{"-107",-107},{"-106",-106},{"-105",-105},{"-104",-104},{"-103",-103},{"-102",-102},{"-101",-101},{"-100",-100},{"- 99",- 99},{"- 98",- 98},
-    {"- 97",- 97},{"- 96",- 96},{"- 95",- 95},{"- 94",- 94},{"- 93",- 93},{"- 92",- 92},{"- 91",- 91},{"- 90",- 90},{"- 89",- 89},{"- 88",- 88},{"- 87",- 87},{"- 86",- 86},{"- 85",- 85},{"- 84",- 84},{"- 83",- 83},
-    {"- 82",- 82},{"- 81",- 81},{"- 80",- 80},{"- 79",- 79},{"- 78",- 78},{"- 77",- 77},{"- 76",- 76},{"- 75",- 75},{"- 74",- 74},{"- 73",- 73},{"- 72",- 72},{"- 71",- 71},{"- 70",- 70},{"- 69",- 69},{"- 68",- 68},
-    {"- 67",- 67},{"- 66",- 66},{"- 65",- 65},{"- 64",- 64},{"- 63",- 63},{"- 62",- 62},{"- 61",- 61},{"- 60",- 60},{"- 59",- 59},{"- 58",- 58},{"- 57",- 57},{"- 56",- 56},{"- 55",- 55},{"- 54",- 54},{"- 53",- 53},
-    {"- 52",- 52},{"- 51",- 51},{"- 50",- 50},{"- 49",- 49},{"- 48",- 48},{"- 47",- 47},{"- 46",- 46},{"- 45",- 45},{"- 44",- 44},{"- 43",- 43},{"- 42",- 42},{"- 41",- 41},{"- 40",- 40},{"- 39",- 39},{"- 38",- 38},
-    {"- 37",- 37},{"- 36",- 36},{"- 35",- 35},{"- 34",- 34},{"- 33",- 33},{"- 32",- 32},{"- 31",- 31},{"- 30",- 30},{"- 29",- 29},{"- 28",- 28},{"- 27",- 27},{"- 26",- 26},{"- 25",- 25},{"- 24",- 24},{"- 23",- 23},
-    {"- 22",- 22},{"- 21",- 21},{"- 20",- 20},{"- 19",- 19},{"- 18",- 18},{"- 17",- 17},{"- 16",- 16},{"- 15",- 15},{"- 14",- 14},{"- 13",- 13},{"- 12",- 12},{"- 11",- 11},{"- 10",- 10},{"-  9",-  9},{"-  8",-  8},
-    {"-  7",-  7},{"-  6",-  6},{"-  5",-  5},{"-  4",-  4},{"-  3",-  3},{"-  2",-  2},{"-  1",-  1},{"+/-0",   0},{"+  1",   1},{"+  2",   2},{"+  3",   3},{"+  4",   4},{"+  5",   5},{"+  6",   6},{"+  7",   7},
-    {"+  8",   8},{"+  9",   9},{"+ 10",  10},{"+ 11",  11},{"+ 12",  12},{"+ 13",  13},{"+ 14",  14},{"+ 15",  15},{"+ 16",  16},{"+ 17",  17},{"+ 18",  18},{"+ 19",  19},{"+ 20",  20},{"+ 21",  21},{"+ 22",  22},
-    {"+ 23",  23},{"+ 24",  24},{"+ 25",  25},{"+ 26",  26},{"+ 27",  27},{"+ 28",  28},{"+ 29",  29},{"+ 30",  30},{"+ 31",  31},{"+ 32",  32},{"+ 33",  33},{"+ 34",  34},{"+ 35",  35},{"+ 36",  36},{"+ 37",  37},
-    {"+ 38",  38},{"+ 39",  39},{"+ 40",  40},{"+ 41",  41},{"+ 42",  42},{"+ 43",  43},{"+ 44",  44},{"+ 45",  45},{"+ 46",  46},{"+ 47",  47},{"+ 48",  48},{"+ 49",  49},{"+ 50",  50},{"+ 51",  51},{"+ 52",  52},
-    {"+ 53",  53},{"+ 54",  54},{"+ 55",  55},{"+ 56",  56},{"+ 57",  57},{"+ 58",  58},{"+ 59",  59},{"+ 60",  60},{"+ 61",  61},{"+ 62",  62},{"+ 63",  63},{"+ 64",  64},{"+ 65",  65},{"+ 66",  66},{"+ 67",  67},
-    {"+ 68",  68},{"+ 69",  69},{"+ 70",  70},{"+ 71",  71},{"+ 72",  72},{"+ 73",  73},{"+ 74",  74},{"+ 75",  75},{"+ 76",  76},{"+ 77",  77},{"+ 78",  78},{"+ 79",  79},{"+ 80",  80},{"+ 81",  81},{"+ 82",  82},
-    {"+ 83",  83},{"+ 84",  84},{"+ 85",  85},{"+ 86",  86},{"+ 87",  87},{"+ 88",  88},{"+ 89",  89},{"+ 90",  90},{"+ 91",  91},{"+ 92",  92},{"+ 93",  93},{"+ 94",  94},{"+ 95",  95},{"+ 96",  96},{"+ 97",  97},
-    {"+ 98",  98},{"+ 99",  99},{"+100", 100},{"+101", 101},{"+102", 102},{"+103", 103},{"+104", 104},{"+105", 105},{"+106", 106},{"+107", 107},{"+108", 108},{"+109", 109},{"+110", 110},{"+111", 111},{"+112", 112},
-    {"+113", 113},{"+114", 114},{"+115", 115},{"+116", 116},{"+117", 117},{"+118", 118},{"+119", 119},{"+120", 120},{"+121", 121},{"+122", 122},{"+123", 123},{"+124", 124},{"+125", 125},{"+126", 126},{"+127", 127}
-  };
-  GEMSelect selectTransposeSteps( 255, optionIntTransposeSteps);
+  GEMSpinnerBoundariesInt optionIntTransposeSteps = { .step = 1, .min = -128, .max = 128};
+  GEMSpinner selectTransposeSteps(optionIntTransposeSteps);
   GEMItem  menuItemTransposeSteps( "Transpose:",   transposeSteps,  selectTransposeSteps, changeTranspose);
     
   SelectOptionByte optionByteColor[] =    { { "Rainbow", RAINBOW_MODE }, { "Tiered" , TIERED_COLOR_MODE }, {"Alt", ALTERNATE_COLOR_MODE} };
@@ -2697,16 +2523,18 @@
       menuPageSynth.addMenuItem(menuItemGeneralMidi);
       menuPageSynth.addMenuItem(menuSynthBack);
     menuPageMain.addMenuItem(menuItemTransposeSteps);
-    menuPageMain.addMenuItem(menuGotoTesting);
-      menuPageTesting.addMenuItem(menuItemVersion);
-      menuPageTesting.addMenuItem(menuItemHardware);
-      menuPageTesting.addMenuItem(menuItemPercep);
-      menuPageTesting.addMenuItem(menuItemShiftColor);
-      menuPageTesting.addMenuItem(menuItemWheelAlt);
-      menuPageTesting.addMenuItem(menuItemPBBehave);
-      menuPageTesting.addMenuItem(menuItemModBehave);
-      menuPageTesting.addMenuItem(menuItemUSBBootloader);
-      menuPageTesting.addMenuItem(menuTestingBack);
+    menuPageMain.addMenuItem(menuGotoAdvanced);
+      menuPageAdvanced.addMenuItem(menuItemVersion);
+      menuPageAdvanced.addMenuItem(menuItemHardware);
+      menuPageAdvanced.addMenuItem(menuItemMPEpitchBend);
+      menuPageAdvanced.addMenuItem(menuItemRotary);
+      menuPageAdvanced.addMenuItem(menuItemPercep);
+      menuPageAdvanced.addMenuItem(menuItemShiftColor);
+      menuPageAdvanced.addMenuItem(menuItemWheelAlt);
+      menuPageAdvanced.addMenuItem(menuItemPBBehave);
+      menuPageAdvanced.addMenuItem(menuItemModBehave);
+      menuPageAdvanced.addMenuItem(menuItemUSBBootloader);
+      menuPageAdvanced.addMenuItem(menuAdvancedBack);
     menuHome();
   }
   void setupGFX() {
@@ -2731,91 +2559,100 @@
   }
 
 // @interface
-  /*
-    This section of the code handles reading
-    the rotary knob and physical hex buttons.
 
-    Documentation:
-      Rotary knob code derived from:
-        https://github.com/buxtronix/arduino/tree/master/libraries/Rotary
-    Copyright 2011 Ben Buxton. Licenced under the GNU GPL Version 3.
-    Contact: bb@cactii.net
-
-    when the mechanical rotary knob is turned,
-    the two pins go through a set sequence of
-    states during one physical "click", as follows:
-      Direction          Binary state of pin A\B
-      Counterclockwise = 1\1, 0\1, 0\0, 1\0, 1\1
-      Clockwise        = 1\1, 1\0, 0\0, 0\1, 1\1
-
-    The neutral state of the knob is 1\1; a turn
-    is complete when 1\1 is reached again after
-    passing through all the valid states above,
-    at which point action should be taken depending
-    on the direction of the turn.
-    
-    The variable rotaryState stores all of this
-    data and refreshes it each loop of the 2nd processor.
-      Value    Meaning
-      0, 4     Knob is in neutral state
-      1, 2, 3  CCW turn state 1, 2, 3
-      5, 6, 7  CW  turn state 1, 2, 3
-      8, 16    Completed turn CCW, CW
-  */
-  #define ROT_PIN_A 20
-  #define ROT_PIN_B 21
-  #define ROT_PIN_C 24
-  byte rotaryState = 0;
-  const byte rotaryStateTable[8][4] = {
-    {0,5,1,0},{2,0,1,0},{2,3,1,0},{2,3,0,8},
-    {0,5,1,0},{6,5,0,0},{6,5,7,0},{6,0,7,16}
-  };
-  byte storeRotaryTurn = 0;
-  bool rotaryClicked = HIGH;          
+  rotaryKnob knob(rotaryPinA, rotaryPinB, rotaryPinC, false);
+  pinGrid_obj pinGrid;
 
   void readHexes() {
-    for (byte r = 0; r < ROWCOUNT; r++) {      // Iterate through each of the row pins on the multiplexing chip.
-      for (byte d = 0; d < 4; d++) {
-        digitalWrite(mPin[d], (r >> d) & 1);
+    if (pinGrid.readTo(readHexState)) {
+      for (byte i = 0; i < BTN_COUNT; i++) {
+        hex[i].interpBtnPress(readHexState[i] == LOW);
       }
-      for (byte c = 0; c < COLCOUNT; c++) {    // Now iterate through each of the column pins that are connected to the current row pin.
-        byte p = cPin[c];                      // Hold the currently selected column pin in a variable.
-        pinMode(p, INPUT_PULLUP);              // Set that row pin to INPUT_PULLUP mode (+3.3V / HIGH).
-        byte i = c + (r * COLCOUNT);
-        delayMicroseconds(6);                  // delay while column pin mode
-        bool didYouPressHex = (digitalRead(p) == LOW);  // hex is pressed if it returns LOW. else not pressed
-        h[i].interpBtnPress(didYouPressHex);
-        if (h[i].btnState == BTN_STATE_NEWPRESS) {
-          h[i].timePressed = runTime;          // log the time
+      for (auto& h : hex) {   // For all buttons in the deck
+        switch (h.btnState) {
+          case BTN_STATE_NEWPRESS: // just pressed
+            h.timePressed = runTime;
+            if (h.isCmd) {
+              cmdOn(h.note);
+            } else if (h.inScale || (!scaleLock)) {
+              if (!(h.MIDIch)) {    
+                if (MPEpitchBendsNeeded == 1) {
+                  h.MIDIch = 1;
+                } else if (MPEpitchBendsNeeded <= 15) {
+                  h.MIDIch = 2 + positiveMod(h.stepsFromC, MPEpitchBendsNeeded);
+                } else {
+                  if (MPEchQueue.empty()) {   // if there aren't any open channels
+                    sendToLog("MPE queue was empty so did not play a midi note");
+                  } else {
+                    h.MIDIch = MPEchQueue.front();   // value in MIDI terms (1-16)
+                    MPEchQueue.pop();
+                    sendToLog("popped " + std::to_string(h.MIDIch) + " off the MPE queue");
+                  }
+                }
+                if (h.MIDIch) {
+                  if(midiD&MIDID_USB)UMIDI.sendNoteOn(h.note, velWheel.curValue, h.MIDIch); // ch 1-16
+                  if(midiD&MIDID_SER)SMIDI.sendNoteOn(h.note, velWheel.curValue, h.MIDIch); // ch 1-16
+
+                  if(midiD&MIDID_USB)UMIDI.sendPitchBend(h.bend, h.MIDIch); // ch 1-16
+                  if(midiD&MIDID_SER)SMIDI.sendPitchBend(h.bend, h.MIDIch); // ch 1-16
+                } 
+              }
+              //if (playbackMode != SYNTH_OFF) {
+              if (playbackMode == SYNTH_POLY) {
+                // operate independently of MIDI
+                if (synthChQueue.empty()) {
+                  sendToLog("synth channels all firing, so did not add one");
+                } else {
+                  h.synthCh = synthChQueue.front();
+                  synthChQueue.pop();
+                  sendToLog("popped " + std::to_string(h.synthCh) + " off the synth queue");
+                  setSynthFreq(h.frequency, h.synthCh);
+                }
+              //} else {    
+                  // operate in lockstep with MIDI
+                  //if (h.MIDIch) {
+                  //  replaceMonoSynthWith(h);
+                  //}
+              // }
+              }
+            }
+            break;
+          case BTN_STATE_RELEASED: // just released
+            if (h.isCmd) {
+              cmdOff(h.note);
+            } else if (h.inScale || (!scaleLock)) {
+              if (h.MIDIch) {    // but just in case, check
+                if(midiD&MIDID_USB)UMIDI.sendNoteOff(h.note, velWheel.curValue, h.MIDIch);
+                if(midiD&MIDID_SER)SMIDI.sendNoteOff(h.note, velWheel.curValue, h.MIDIch);
+                if (MPEpitchBendsNeeded > 15) {
+                  MPEchQueue.push(h.MIDIch);
+                  sendToLog("pushed " + std::to_string(h.MIDIch) + " on the MPE queue");
+                }
+                h.MIDIch = 0;
+              }
+              //if (playbackMode && (playbackMode != SYNTH_POLY)) {
+                //if (arpeggiatingNow == &h) {
+                //  replaceMonoSynthWith(findNextHeldNote());
+                //}
+              //}
+              if (playbackMode == SYNTH_POLY) {
+                if (h.synthCh) {
+                  setSynthFreq(0, h.synthCh);
+                  synthChQueue.push(h.synthCh);
+                  h.synthCh = 0;
+                }
+              }
+            }
+            break;
+          case BTN_STATE_HELD: // held
+            break;
+          default: // inactive
+            break;
         }
-        pinMode(p, INPUT);                     // Set the selected column pin back to INPUT mode (0V / LOW).
-       }
-    }
-    for (byte i = 0; i < BTN_COUNT; i++) {   // For all buttons in the deck
-      switch (h[i].btnState) {
-        case BTN_STATE_NEWPRESS: // just pressed
-          if (h[i].isCmd) {
-            cmdOn(i);
-          } else if (h[i].inScale || (!scaleLock)) {
-            tryMIDInoteOn(i);
-            trySynthNoteOn(i);
-          }
-          break;
-        case BTN_STATE_RELEASED: // just released
-          if (h[i].isCmd) {
-            cmdOff(i);
-          } else if (h[i].inScale || (!scaleLock)) {
-            tryMIDInoteOff(i);
-            trySynthNoteOff(i); 
-          }
-          break;
-        case BTN_STATE_HELD: // held
-          break;
-        default: // inactive
-          break;
       }
     }
   }
+  
   void updateWheels() {  
     velWheel.setTargetValue();
     bool upd = velWheel.updateValue(runTime);
@@ -2837,30 +2674,17 @@
       }
     }
   }
-  void setupRotary() {
-    pinMode(ROT_PIN_A, INPUT_PULLUP);
-    pinMode(ROT_PIN_B, INPUT_PULLUP);
-    pinMode(ROT_PIN_C, INPUT_PULLUP);
-  }
-  void readKnob() {
-    rotaryState = rotaryStateTable[rotaryState & 7][
-      (digitalRead(ROT_PIN_B) << 1) | digitalRead(ROT_PIN_A)
-    ];
-    if (rotaryState & 24) {
-      storeRotaryTurn = rotaryState;
-    }
-  }
+
   void dealWithRotary() {
+    knob.invertDirection(rotaryInvert);
     if (menu.readyForKey()) {
-      bool temp = digitalRead(ROT_PIN_C);
-      if (temp > rotaryClicked) {
+      if (knob.getClick()) {
         menu.registerKeyPress(GEM_KEY_OK);
         screenTime = 0;
       }
-      rotaryClicked = temp;
-      if (storeRotaryTurn != 0) {
-        menu.registerKeyPress((storeRotaryTurn == 8) ? GEM_KEY_UP : GEM_KEY_DOWN);
-        storeRotaryTurn = 0;
+      int getTurn = knob.getTurnFromBuffer();
+      if (getTurn != 0) {
+        menu.registerKeyPress((getTurn > 0) ? GEM_KEY_UP : GEM_KEY_DOWN);
         screenTime = 0;
       }
     }
@@ -2872,6 +2696,8 @@
         audioD = AUDIO_PIEZO | AUDIO_AJACK;
         menuPageSynth.addMenuItem(menuItemAudioD, 2);
         globalBrightness = BRIGHT_DIM;
+        setLEDcolorCodes();
+        rotaryInvert = true;
     }
   }
 
@@ -2894,39 +2720,44 @@
     the rotary knob inputs.
     Everything else runs on the first core.
   */
+  bool coreZeroSetupDone = false;
   void setup() {
     #if (defined(ARDUINO_ARCH_MBED) && defined(ARDUINO_ARCH_RP2040))
     TinyUSB_Device_Init(0);  // Manual begin() is required on core without built-in support for TinyUSB such as mbed rp2040
     #endif
     setupMIDI();
     setupFileSystem();
-    Wire.setSDA(SDAPIN);
-    Wire.setSCL(SCLPIN);
-    setupPins();
+    Wire.setSDA(OLED_sdaPin);
+    Wire.setSCL(OLED_sclPin);
     setupGrid();
     applyLayout();
     setupLEDs();
     setupGFX();
-    setupRotary();
     setupMenu();
     for (byte i = 0; i < 5 && !TinyUSBDevice.mounted(); i++) {
       delay(1);  // wait until device mounted, maybe
     }
+    setupSynth(pwmPins);
+    pinGrid.setup(muxPins, colPins, mapGridToPixel, true); // true = iterate mux pins first, false = iterate col pins first
+    coreZeroSetupDone = true;
   }
   void loop() {   // run on first core
     timeTracker();  // Time tracking functions
     screenSaver();  // Reduces wear-and-tear on OLED panel
     readHexes();       // Read and store the digital button states of the scanning matrix
-    arpeggiate();      // arpeggiate if synth mode allows it
+    //arpeggiate();      // arpeggiate if synth mode allows it
     updateWheels();   // deal with the pitch/mod wheel
     animateLEDs();     // deal with animations
     lightUpLEDs();      // refresh LEDs
     dealWithRotary();  // deal with menu
   }
   void setup1() {  // set up on second core
-    setupSynth(PIEZO_PIN, PIEZO_SLICE);
-    setupSynth(AJACK_PIN, AJACK_SLICE);
+    while (!coreZeroSetupDone) {1;}
+    task_mgr.add_task(audio_sample_in_uS, audioPoll);
+    task_mgr.add_task(rotary_rate_in_uS, std::bind(&rotaryKnob::update, &knob));
+    task_mgr.add_task(frequency_poll, std::bind(&pinGrid_obj::poll, &pinGrid));
+    task_mgr.begin();
   }
   void loop1() {  // run on second core
-    readKnob();
+
   }
